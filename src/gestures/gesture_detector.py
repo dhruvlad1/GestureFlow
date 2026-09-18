@@ -133,7 +133,7 @@ class GestureDetector:
             -> Double Click
 
         Index + Middle
-            -> Continuous scrolling
+            -> Continuous vertical / horizontal scrolling
     """
 
     # ---------------------------------------------------------
@@ -201,15 +201,38 @@ class GestureDetector:
         # -----------------------------------------------------
 
         self.previous_scroll_active = False
+
+        self.previous_scroll_x = None
         self.previous_scroll_y = None
 
-        # 1  = scrolling up
-        # -1 = scrolling down
-        # 0  = direction not selected
+        # Scroll axis:
+        #
+        # "vertical"   = vertical scrolling
+        # "horizontal" = horizontal scrolling
+        # None         = direction not selected yet
+        self.scroll_axis = None
+
+        # Direction:
+        #
+        # Vertical:
+        #     1  = up
+        #     -1 = down
+        #
+        # Horizontal:
+        #     1  = right
+        #     -1 = left
+        #
+        # 0 = direction not selected
         self.scroll_direction = 0
 
         # Time of the most recent scroll event.
         self.last_scroll_update_time = 0
+
+        # Most recent horizontal scroll amount.
+        #
+        # This is kept separately so the existing vertical
+        # scrolling return value remains backward compatible.
+        self.horizontal_scroll_amount = 0
 
     # =========================================================
     # Geometry helpers
@@ -539,24 +562,32 @@ class GestureDetector:
 
     def detect_scroll(self, hand):
         """
-        Continuous scrolling.
+        Continuous vertical and horizontal scrolling.
 
         Interaction:
 
             1. Extend Index + Middle.
-            2. Move the hand slightly up or down.
-            3. Direction is selected.
+            2. Move the hand up/down/left/right.
+            3. The dominant movement direction is selected.
             4. Scrolling continues automatically.
             5. Release either finger to stop.
 
         Returns:
 
-            Positive integer -> scroll up
-            Negative integer -> scroll down
-            0                 -> no scroll event
+            Positive integer -> vertical scroll up
+            Negative integer -> vertical scroll down
+            0                 -> no vertical scroll event
+
+        Horizontal scrolling is stored in
+        self.horizontal_scroll_amount so the main application
+        can perform a horizontal mouse-wheel action.
         """
 
         active = self.is_scroll_gesture_active(hand)
+
+        # Reset the horizontal amount at the beginning of
+        # every frame.
+        self.horizontal_scroll_amount = 0
 
         # -----------------------------------------------------
         # Gesture released.
@@ -565,12 +596,17 @@ class GestureDetector:
         if not active:
 
             self.previous_scroll_active = False
+            self.previous_scroll_x = None
             self.previous_scroll_y = None
+
+            self.scroll_axis = None
             self.scroll_direction = 0
+
             self.last_scroll_update_time = 0
 
             return 0
 
+        current_x = hand.wrist.x
         current_y = hand.wrist.y
 
         # -----------------------------------------------------
@@ -580,8 +616,13 @@ class GestureDetector:
         if not self.previous_scroll_active:
 
             self.previous_scroll_active = True
+
+            self.previous_scroll_x = current_x
             self.previous_scroll_y = current_y
+
+            self.scroll_axis = None
             self.scroll_direction = 0
+
             self.last_scroll_update_time = monotonic()
 
             return 0
@@ -589,45 +630,106 @@ class GestureDetector:
         # -----------------------------------------------------
         # Calculate movement.
         #
-        # MediaPipe Y increases downward.
+        # MediaPipe coordinates:
         #
-        # Upward movement:
-        #     previous_y - current_y > 0
+        # X increases from left to right.
+        # Y increases from top to bottom.
         #
-        # Downward movement:
-        #     previous_y - current_y < 0
+        # Therefore:
+        #
+        # movement_x > 0 -> hand moved right
+        # movement_x < 0 -> hand moved left
+        #
+        # movement_y > 0 -> hand moved up
+        # movement_y < 0 -> hand moved down
         # -----------------------------------------------------
 
-        movement = (
+        movement_x = (
+            current_x
+            - self.previous_scroll_x
+        )
+
+        movement_y = (
             self.previous_scroll_y
             - current_y
         )
 
+        self.previous_scroll_x = current_x
         self.previous_scroll_y = current_y
 
         # -----------------------------------------------------
-        # Select / change direction.
+        # Select the dominant scroll axis.
         #
-        # A relatively small movement is enough to change
-        # direction. Once selected, the direction remains
-        # active even when the hand stops moving.
+        # The larger movement determines whether the user
+        # intends to scroll vertically or horizontally.
         # -----------------------------------------------------
 
+        movement_x_abs = abs(movement_x)
+        movement_y_abs = abs(movement_y)
+
         if (
-            abs(movement)
+            self.scroll_axis is None
+            and max(
+                movement_x_abs,
+                movement_y_abs,
+            )
             >= self.scroll_direction_change_threshold
         ):
 
-            if movement > 0:
-                self.scroll_direction = 1
+            if movement_y_abs > movement_x_abs:
+
+                self.scroll_axis = "vertical"
+
+                if movement_y > 0:
+                    self.scroll_direction = 1
+                else:
+                    self.scroll_direction = -1
+
             else:
-                self.scroll_direction = -1
+
+                self.scroll_axis = "horizontal"
+
+                if movement_x > 0:
+                    self.scroll_direction = 1
+                else:
+                    self.scroll_direction = -1
+
+        # -----------------------------------------------------
+        # Change direction while remaining on the same axis.
+        # -----------------------------------------------------
+
+        elif self.scroll_axis == "vertical":
+
+            if (
+                movement_y_abs
+                >= self.scroll_direction_change_threshold
+            ):
+
+                if movement_y > 0:
+                    self.scroll_direction = 1
+                else:
+                    self.scroll_direction = -1
+
+        elif self.scroll_axis == "horizontal":
+
+            if (
+                movement_x_abs
+                >= self.scroll_direction_change_threshold
+            ):
+
+                if movement_x > 0:
+                    self.scroll_direction = 1
+                else:
+                    self.scroll_direction = -1
 
         # -----------------------------------------------------
         # Direction has not been selected yet.
         # -----------------------------------------------------
 
-        if self.scroll_direction == 0:
+        if (
+            self.scroll_axis is None
+            or self.scroll_direction == 0
+        ):
             return 0
 
         # -----------------------------------------------------
@@ -647,13 +749,29 @@ class GestureDetector:
         self.last_scroll_update_time = now
 
         # -----------------------------------------------------
-        # Continuous scrolling.
+        # Continuous vertical scrolling.
         # -----------------------------------------------------
 
-        return (
+        if self.scroll_axis == "vertical":
+
+            return (
+                self.scroll_direction
+                * self.scroll_speed
+            )
+
+        # -----------------------------------------------------
+        # Continuous horizontal scrolling.
+        #
+        # Store the value separately because pyautogui.scroll()
+        # handles vertical scrolling.
+        # -----------------------------------------------------
+
+        self.horizontal_scroll_amount = (
             self.scroll_direction
             * self.scroll_speed
         )
+
+        return 0
 
     # =========================================================
     # Main gesture detection
@@ -707,6 +825,10 @@ class GestureDetector:
         if scroll != 0:
             return scroll
 
+        # Horizontal scrolling is handled separately by main.py.
+        if self.horizontal_scroll_amount != 0:
+            return "HORIZONTAL_SCROLL"
+
         return None
 
     # =========================================================
@@ -728,6 +850,12 @@ class GestureDetector:
         self.double_click_stable_count = 0
 
         self.previous_scroll_active = False
+        self.previous_scroll_x = None
         self.previous_scroll_y = None
+
+        self.scroll_axis = None
         self.scroll_direction = 0
+
         self.last_scroll_update_time = 0
+
+        self.horizontal_scroll_amount = 0

@@ -75,7 +75,8 @@ def main():
     print("  Hold Index + Thumb = Drag")
     print("  Middle + Thumb = Right Click")
     print("  Ring + Thumb = Double Click")
-    print("  Index + Middle = Continuous Scroll")
+    print("  Index + Middle + Up/Down = Vertical Scroll")
+    print("  Index + Middle + Left/Right = Horizontal Scroll")
     print()
 
     # ---------------------------------------------------------
@@ -196,6 +197,27 @@ def main():
                 if gesture != 0:
                     pyautogui.scroll(gesture)
 
+            elif gesture == "HORIZONTAL_SCROLL":
+
+                # -------------------------------------------------
+                # PyAutoGUI uses hscroll() for horizontal scrolling.
+                #
+                # Positive values:
+                #     Scroll right
+                #
+                # Negative values:
+                #     Scroll left
+                # -------------------------------------------------
+
+                horizontal_amount = (
+                    gesture_detector.horizontal_scroll_amount
+                )
+
+                if horizontal_amount != 0:
+                    pyautogui.hscroll(
+                        horizontal_amount
+                    )
+
             # -------------------------------------------------
             # Draw fingertips.
             # -------------------------------------------------
@@ -258,13 +280,30 @@ def main():
 
             if is_scrolling:
 
-                if gesture_detector.scroll_direction > 0:
-                    display_gesture = "SCROLLING UP"
+                if gesture_detector.scroll_axis == "vertical":
 
-                elif gesture_detector.scroll_direction < 0:
-                    display_gesture = "SCROLLING DOWN"
+                    if gesture_detector.scroll_direction > 0:
+                        display_gesture = "SCROLLING UP"
+
+                    elif gesture_detector.scroll_direction < 0:
+                        display_gesture = "SCROLLING DOWN"
+
+                    else:
+                        display_gesture = "SCROLL READY"
+
+                elif gesture_detector.scroll_axis == "horizontal":
+
+                    if gesture_detector.scroll_direction > 0:
+                        display_gesture = "SCROLLING RIGHT"
+
+                    elif gesture_detector.scroll_direction < 0:
+                        display_gesture = "SCROLLING LEFT"
+
+                    else:
+                        display_gesture = "SCROLL READY"
 
                 else:
+
                     display_gesture = "SCROLL READY"
 
             elif gesture is None:
@@ -353,7 +392,7 @@ def main():
 
         cv2.putText(
             frame,
-            "Index + Middle = Continuous Scroll",
+            "Index + Middle = Scroll",
             (20, 175),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
