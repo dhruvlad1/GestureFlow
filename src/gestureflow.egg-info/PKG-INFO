@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: gestureflow
+Version: 0.1.0
+Summary: Touchless computer interaction using hand gestures.
+Requires-Python: <3.14,>=3.11
+Requires-Dist: opencv-python
+Requires-Dist: mediapipe
+Requires-Dist: pyautogui
+Requires-Dist: numpy
