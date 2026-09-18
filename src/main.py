@@ -38,9 +38,9 @@ def main():
         click_stable_frames=3,
         right_click_cooldown=0.4,
         drag_hold_duration=0.5,
-        scroll_threshold=0.008,
-        scroll_multiplier=180,
-        max_scroll_speed=12,
+        scroll_threshold=0.015,
+        scroll_speed=60,
+        scroll_direction_change_threshold=0.012,
     )
 
     # ---------------------------------------------------------
@@ -75,7 +75,7 @@ def main():
     print("  Hold Index + Thumb = Drag")
     print("  Middle + Thumb = Right Click")
     print("  Ring + Thumb = Double Click")
-    print("  Index + Middle = Scroll")
+    print("  Index + Middle = Continuous Scroll")
     print()
 
     # ---------------------------------------------------------
@@ -108,24 +108,46 @@ def main():
         if landmarks:
 
             # -------------------------------------------------
+            # Convert MediaPipe landmarks into HandData.
+            # -------------------------------------------------
+
+            hand = gesture_detector.get_hand(
+                landmarks
+            )
+
+            if hand is None:
+                continue
+
+            # -------------------------------------------------
             # Detect gestures.
             # -------------------------------------------------
 
             gesture = gesture_detector.detect_gesture(
-                landmarks
+                hand
+            )
+
+            # -------------------------------------------------
+            # Check whether the scroll gesture is currently
+            # active.
+            #
+            # This is intentionally checked separately from
+            # the returned scroll amount because continuous
+            # scrolling may return 0 during a short interval
+            # between scroll events.
+            # -------------------------------------------------
+
+            is_scrolling = (
+                gesture_detector.is_scroll_gesture_active(
+                    hand
+                )
             )
 
             # -------------------------------------------------
             # Index fingertip controls cursor movement.
             #
-            # Cursor movement is disabled while scrolling
-            # so vertical scrolling does not move the cursor.
+            # Cursor movement is completely disabled while
+            # Index + Middle are being used for scrolling.
             # -------------------------------------------------
-
-            is_scrolling = isinstance(
-                gesture,
-                int,
-            )
 
             if not is_scrolling:
 
@@ -154,8 +176,9 @@ def main():
 
             elif gesture == "DRAG_START":
 
-                pyautogui.mouseDown()
-                mouse_button_down = True
+                if not mouse_button_down:
+                    pyautogui.mouseDown()
+                    mouse_button_down = True
 
             elif gesture == "DRAG_END":
 
@@ -163,11 +186,15 @@ def main():
                     pyautogui.mouseUp()
                     mouse_button_down = False
 
-            elif isinstance(gesture, int):
+            elif isinstance(gesture, int) and not isinstance(
+                gesture,
+                bool,
+            ):
 
                 # Positive values scroll upward.
                 # Negative values scroll downward.
-                pyautogui.scroll(gesture)
+                if gesture != 0:
+                    pyautogui.scroll(gesture)
 
             # -------------------------------------------------
             # Draw fingertips.
@@ -178,6 +205,7 @@ def main():
             index_tip_x = int(
                 landmarks[8].x * width
             )
+
             index_tip_y = int(
                 landmarks[8].y * height
             )
@@ -185,6 +213,7 @@ def main():
             middle_tip_x = int(
                 landmarks[12].x * width
             )
+
             middle_tip_y = int(
                 landmarks[12].y * height
             )
@@ -192,6 +221,7 @@ def main():
             ring_tip_x = int(
                 landmarks[16].x * width
             )
+
             ring_tip_y = int(
                 landmarks[16].y * height
             )
@@ -226,12 +256,20 @@ def main():
 
             display_gesture = gesture
 
-            if isinstance(gesture, int):
+            if is_scrolling:
 
-                if gesture > 0:
+                if gesture_detector.scroll_direction > 0:
                     display_gesture = "SCROLLING UP"
-                else:
+
+                elif gesture_detector.scroll_direction < 0:
                     display_gesture = "SCROLLING DOWN"
+
+                else:
+                    display_gesture = "SCROLL READY"
+
+            elif gesture is None:
+
+                display_gesture = "MOVING"
 
             if mouse_button_down:
                 display_gesture = "DRAGGING"
@@ -315,7 +353,7 @@ def main():
 
         cv2.putText(
             frame,
-            "Index + Middle = Scroll",
+            "Index + Middle = Continuous Scroll",
             (20, 175),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
@@ -368,4 +406,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
