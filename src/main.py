@@ -4,6 +4,7 @@ import pyautogui
 from hand_tracking.hand_detector import HandDetector
 from gestures.gesture_detector import GestureDetector
 from cursor.cursor_controller import CursorController
+from utils import config
 
 
 def main():
@@ -12,7 +13,9 @@ def main():
     # Initialize camera.
     # ---------------------------------------------------------
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(
+        config.CAMERA_INDEX
+    )
 
     if not cap.isOpened():
         print("Could not open camera.")
@@ -20,41 +23,28 @@ def main():
 
     # ---------------------------------------------------------
     # Initialize hand detector.
+    #
+    # The detector uses config.py defaults, so no hard-coded
+    # MediaPipe settings are required here.
     # ---------------------------------------------------------
 
-    hand_detector = HandDetector(
-        max_num_hands=1,
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.7,
-    )
+    hand_detector = HandDetector()
 
     # ---------------------------------------------------------
     # Initialize gesture detector.
+    #
+    # The detector uses config.py defaults.
     # ---------------------------------------------------------
 
-    gesture_detector = GestureDetector(
-        pinch_start_threshold=0.075,
-        pinch_release_threshold=0.095,
-        click_stable_frames=3,
-        right_click_cooldown=0.4,
-        drag_hold_duration=0.5,
-        scroll_threshold=0.015,
-        scroll_speed=60,
-        scroll_direction_change_threshold=0.012,
-    )
+    gesture_detector = GestureDetector()
 
     # ---------------------------------------------------------
     # Initialize cursor controller.
+    #
+    # The controller uses config.py defaults.
     # ---------------------------------------------------------
 
-    cursor_controller = CursorController(
-        smoothing=1.0,
-        camera_min_x=0.10,
-        camera_max_x=0.90,
-        camera_min_y=0.10,
-        camera_max_y=0.90,
-        screen_padding=5,
-    )
+    cursor_controller = CursorController()
 
     # MediaPipe VIDEO mode requires timestamps to increase
     # monotonically for the lifetime of the detector.
@@ -411,7 +401,7 @@ def main():
         )
 
         cv2.imshow(
-            "GestureFlow",
+            config.WINDOW_TITLE,
             frame,
         )
 

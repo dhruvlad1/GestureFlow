@@ -2,6 +2,19 @@ from dataclasses import dataclass
 from math import acos, degrees, sqrt
 from time import monotonic
 
+from utils.config import (
+    PINCH_START_THRESHOLD,
+    PINCH_RELEASE_THRESHOLD,
+    FINGER_EXTENSION_ANGLE,
+    CLICK_STABLE_FRAMES,
+    RIGHT_CLICK_COOLDOWN,
+    DRAG_HOLD_DURATION,
+    SCROLL_THRESHOLD,
+    SCROLL_SPEED,
+    SCROLL_DIRECTION_CHANGE_THRESHOLD,
+    SCROLL_UPDATE_INTERVAL,
+)
+
 
 @dataclass
 class HandData:
@@ -142,15 +155,18 @@ class GestureDetector:
 
     def __init__(
         self,
-        pinch_start_threshold=0.075,
-        pinch_release_threshold=0.095,
-        finger_extension_angle=160,
-        click_stable_frames=3,
-        right_click_cooldown=0.4,
-        drag_hold_duration=0.5,
-        scroll_threshold=0.015,
-        scroll_speed=12,
-        scroll_direction_change_threshold=0.012,
+        pinch_start_threshold=PINCH_START_THRESHOLD,
+        pinch_release_threshold=PINCH_RELEASE_THRESHOLD,
+        finger_extension_angle=FINGER_EXTENSION_ANGLE,
+        click_stable_frames=CLICK_STABLE_FRAMES,
+        right_click_cooldown=RIGHT_CLICK_COOLDOWN,
+        drag_hold_duration=DRAG_HOLD_DURATION,
+        scroll_threshold=SCROLL_THRESHOLD,
+        scroll_speed=SCROLL_SPEED,
+        scroll_direction_change_threshold=(
+            SCROLL_DIRECTION_CHANGE_THRESHOLD
+        ),
+        scroll_update_interval=SCROLL_UPDATE_INTERVAL,
     ):
 
         self.pinch_start_threshold = pinch_start_threshold
@@ -171,6 +187,8 @@ class GestureDetector:
         self.scroll_direction_change_threshold = (
             scroll_direction_change_threshold
         )
+
+        self.scroll_update_interval = scroll_update_interval
 
         # -----------------------------------------------------
         # Left click / drag state.
@@ -734,15 +752,13 @@ class GestureDetector:
 
         # -----------------------------------------------------
         # Generate scroll events continuously.
-        #
-        # 0.02 seconds = up to 50 scroll events per second.
         # -----------------------------------------------------
 
         now = monotonic()
 
         if (
             now - self.last_scroll_update_time
-            < 0.02
+            < self.scroll_update_interval
         ):
             return 0
 

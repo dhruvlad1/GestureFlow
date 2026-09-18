@@ -1,5 +1,14 @@
 import pyautogui
 
+from utils.config import (
+    CURSOR_SMOOTHING,
+    CAMERA_MIN_X,
+    CAMERA_MAX_X,
+    CAMERA_MIN_Y,
+    CAMERA_MAX_Y,
+    SCREEN_PADDING,
+)
+
 
 class CursorController:
     """
@@ -8,12 +17,12 @@ class CursorController:
 
     def __init__(
         self,
-        smoothing=1.0,
-        camera_min_x=0.10,
-        camera_max_x=0.90,
-        camera_min_y=0.10,
-        camera_max_y=0.90,
-        screen_padding=5,
+        smoothing=CURSOR_SMOOTHING,
+        camera_min_x=CAMERA_MIN_X,
+        camera_max_x=CAMERA_MAX_X,
+        camera_min_y=CAMERA_MIN_Y,
+        camera_max_y=CAMERA_MAX_Y,
+        screen_padding=SCREEN_PADDING,
     ):
         """
         smoothing:
