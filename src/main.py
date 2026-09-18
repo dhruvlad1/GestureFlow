@@ -1,286 +1,371 @@
 import cv2
+import pyautogui
 
 from hand_tracking.hand_detector import HandDetector
-from gestures.gesture_detector import GestureDetector, HandData
+from gestures.gesture_detector import GestureDetector
 from cursor.cursor_controller import CursorController
 
 
-# MediaPipe hand landmark connections.
-HAND_CONNECTIONS = [
-    (0, 1), (1, 2), (2, 3), (3, 4),        # Thumb
-    (0, 5), (5, 6), (6, 7), (7, 8),        # Index
-    (0, 9), (9, 10), (10, 11), (11, 12),   # Middle
-    (0, 13), (13, 14), (14, 15), (15, 16), # Ring
-    (0, 17), (17, 18), (18, 19), (19, 20), # Pinky
-    (5, 9), (9, 13), (13, 17),             # Palm
-]
-
-
 def main():
-    camera = cv2.VideoCapture(0)
 
-    if not camera.isOpened():
-        print("Error: Could not open camera.")
+    # ---------------------------------------------------------
+    # Initialize camera.
+    # ---------------------------------------------------------
+
+    cap = cv2.VideoCapture(0)
+
+    if not cap.isOpened():
+        print("Could not open camera.")
         return
 
-    hand_detector = HandDetector()
+    # ---------------------------------------------------------
+    # Initialize hand detector.
+    # ---------------------------------------------------------
+
+    hand_detector = HandDetector(
+        max_num_hands=1,
+        min_detection_confidence=0.7,
+        min_tracking_confidence=0.7,
+    )
+
+    # ---------------------------------------------------------
+    # Initialize gesture detector.
+    # ---------------------------------------------------------
 
     gesture_detector = GestureDetector(
         pinch_start_threshold=0.075,
         pinch_release_threshold=0.095,
         click_stable_frames=3,
-        double_click_interval=0.1,
         right_click_cooldown=0.4,
+        drag_hold_duration=0.5,
+        scroll_threshold=0.008,
+        scroll_multiplier=180,
+        max_scroll_speed=12,
     )
+
+    # ---------------------------------------------------------
+    # Initialize cursor controller.
+    # ---------------------------------------------------------
 
     cursor_controller = CursorController(
-        smoothing=1,
-        margin=0.1,
+        smoothing=1.0,
+        camera_min_x=0.10,
+        camera_max_x=0.90,
+        camera_min_y=0.10,
+        camera_max_y=0.90,
+        screen_padding=5,
     )
 
-    print("GestureFlow started.")
-    print("Move your index finger to control the cursor.")
-    print("Index + Thumb = Left Click.")
-    print("Index + Thumb twice = Double Click.")
-    print("Middle + Thumb = Right Click.")
-    print("Press 'q' to quit.")
-
-    # MediaPipe requires strictly increasing timestamps.
+    # MediaPipe VIDEO mode requires timestamps to increase
+    # monotonically for the lifetime of the detector.
     timestamp_ms = 0
 
-    while True:
-        success, frame = camera.read()
+    # Track whether the operating system mouse button
+    # is currently being held for dragging.
+    mouse_button_down = False
 
-        if not success:
-            print("Error: Could not read frame.")
+    print()
+    print("GestureFlow started.")
+    print("Controls:")
+    print("  Q = Quit")
+    print("  R = Reset cursor smoothing")
+    print()
+    print("Gestures:")
+    print("  Index + Thumb = Left Click")
+    print("  Hold Index + Thumb = Drag")
+    print("  Middle + Thumb = Right Click")
+    print("  Ring + Thumb = Double Click")
+    print("  Index + Middle = Scroll")
+    print()
+
+    # ---------------------------------------------------------
+    # Main loop.
+    # ---------------------------------------------------------
+
+    while True:
+
+        ret, frame = cap.read()
+
+        if not ret:
+            print("Failed to read camera frame.")
             break
 
         # Mirror the camera feed.
         frame = cv2.flip(frame, 1)
 
-        # Increase timestamp for every frame.
         timestamp_ms += 1
 
-        # Detect hand landmarks.
         results = hand_detector.find_hands(
             frame,
-            timestamp_ms
+            timestamp_ms,
         )
 
-        gesture_name = "NO HAND"
+        landmarks = None
 
-        if results.hand_landmarks:
+        if results and results.hand_landmarks:
+            landmarks = results.hand_landmarks[0]
 
-            for landmarks in results.hand_landmarks:
+        if landmarks:
 
-                # Create clean hand representation.
-                hand = HandData(landmarks)
+            # -------------------------------------------------
+            # Detect gestures.
+            # -------------------------------------------------
 
-                # Get index fingertip.
-                index_tip = hand.index_tip
+            gesture = gesture_detector.detect_gesture(
+                landmarks
+            )
 
-                # Detect left-click or double-click.
-                click_event = (
-                    gesture_detector.detect_click_event(
-                        landmarks
-                    )
+            # -------------------------------------------------
+            # Index fingertip controls cursor movement.
+            #
+            # Cursor movement is disabled while scrolling
+            # so vertical scrolling does not move the cursor.
+            # -------------------------------------------------
+
+            is_scrolling = isinstance(
+                gesture,
+                int,
+            )
+
+            if not is_scrolling:
+
+                index_tip = landmarks[8]
+
+                cursor_controller.move_cursor(
+                    index_tip.x,
+                    index_tip.y,
                 )
 
-                # Detect right click.
-                right_click = (
-                    gesture_detector.detect_right_click(
-                        landmarks
-                    )
-                )
+            # -------------------------------------------------
+            # Perform mouse actions.
+            # -------------------------------------------------
 
-                # Get current gesture states.
-                is_left_pinching = (
-                    gesture_detector.previous_left_pinching
-                )
+            if gesture == "DOUBLE_CLICK":
 
-                is_right_pinching = (
-                    gesture_detector.previous_right_pinching
-                )
+                cursor_controller.double_click()
 
-                # Determine current gesture.
-                if click_event == "DOUBLE_CLICK":
+            elif gesture == "LEFT_CLICK":
 
-                    # The first click was already performed
-                    # during the first pinch. This click is
-                    # the second click of the double-click.
-                    cursor_controller.left_click()
+                cursor_controller.left_click()
 
-                    gesture_name = "DOUBLE CLICK"
+            elif gesture == "RIGHT_CLICK":
 
-                elif click_event == "LEFT_CLICK":
+                cursor_controller.right_click()
 
-                    cursor_controller.left_click()
+            elif gesture == "DRAG_START":
 
-                    gesture_name = "LEFT CLICK"
+                pyautogui.mouseDown()
+                mouse_button_down = True
 
-                elif right_click:
+            elif gesture == "DRAG_END":
 
-                    cursor_controller.right_click()
+                if mouse_button_down:
+                    pyautogui.mouseUp()
+                    mouse_button_down = False
 
-                    gesture_name = "RIGHT CLICK"
+            elif isinstance(gesture, int):
 
-                elif is_left_pinching:
+                # Positive values scroll upward.
+                # Negative values scroll downward.
+                pyautogui.scroll(gesture)
 
-                    gesture_name = "LEFT PINCH"
+            # -------------------------------------------------
+            # Draw fingertips.
+            # -------------------------------------------------
 
-                elif is_right_pinching:
+            height, width = frame.shape[:2]
 
-                    gesture_name = "RIGHT PINCH"
+            index_tip_x = int(
+                landmarks[8].x * width
+            )
+            index_tip_y = int(
+                landmarks[8].y * height
+            )
 
+            middle_tip_x = int(
+                landmarks[12].x * width
+            )
+            middle_tip_y = int(
+                landmarks[12].y * height
+            )
+
+            ring_tip_x = int(
+                landmarks[16].x * width
+            )
+            ring_tip_y = int(
+                landmarks[16].y * height
+            )
+
+            cv2.circle(
+                frame,
+                (index_tip_x, index_tip_y),
+                8,
+                (0, 255, 0),
+                -1,
+            )
+
+            cv2.circle(
+                frame,
+                (middle_tip_x, middle_tip_y),
+                8,
+                (255, 0, 0),
+                -1,
+            )
+
+            cv2.circle(
+                frame,
+                (ring_tip_x, ring_tip_y),
+                8,
+                (0, 255, 255),
+                -1,
+            )
+
+            # -------------------------------------------------
+            # Display current gesture.
+            # -------------------------------------------------
+
+            display_gesture = gesture
+
+            if isinstance(gesture, int):
+
+                if gesture > 0:
+                    display_gesture = "SCROLLING UP"
                 else:
+                    display_gesture = "SCROLLING DOWN"
 
-                    gesture_name = "MOVE"
+            if mouse_button_down:
+                display_gesture = "DRAGGING"
 
-                # Move cursor only when no click gesture
-                # is currently active.
-                if (
-                    not is_left_pinching
-                    and not is_right_pinching
-                ):
-                    cursor_controller.move_cursor(
-                        index_tip.x,
-                        index_tip.y
-                    )
+            cv2.putText(
+                frame,
+                f"Gesture: {display_gesture}",
+                (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
 
-                # Convert normalized landmarks to pixel coordinates.
-                points = []
+        else:
 
-                for landmark in landmarks:
+            cv2.putText(
+                frame,
+                "No hand detected",
+                (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
 
-                    x = int(
-                        landmark.x * frame.shape[1]
-                    )
+            # Prevent a cursor jump when the hand disappears.
+            cursor_controller.reset()
 
-                    y = int(
-                        landmark.y * frame.shape[0]
-                    )
+            # Never leave the mouse button held down
+            # if tracking is lost during a drag.
+            if mouse_button_down:
+                pyautogui.mouseUp()
+                mouse_button_down = False
 
-                    points.append((x, y))
+            gesture_detector.reset()
 
-                # Draw hand connections.
-                for start, end in HAND_CONNECTIONS:
+        # -----------------------------------------------------
+        # Display gesture controls.
+        # -----------------------------------------------------
 
-                    cv2.line(
-                        frame,
-                        points[start],
-                        points[end],
-                        (0, 255, 0),
-                        2,
-                    )
-
-                # Draw landmarks.
-                for point in points:
-
-                    cv2.circle(
-                        frame,
-                        point,
-                        5,
-                        (0, 255, 0),
-                        -1,
-                    )
-
-                # Highlight index fingertip.
-                cv2.circle(
-                    frame,
-                    points[8],
-                    8,
-                    (0, 0, 255),
-                    -1,
-                )
-
-                # Highlight thumb fingertip.
-                cv2.circle(
-                    frame,
-                    points[4],
-                    8,
-                    (255, 0, 0),
-                    -1,
-                )
-
-                # Highlight middle fingertip.
-                cv2.circle(
-                    frame,
-                    points[12],
-                    8,
-                    (255, 255, 0),
-                    -1,
-                )
-
-        # Display current gesture.
-        cv2.putText(
-            frame,
-            f"Gesture: {gesture_name}",
-            (20, 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.9,
-            (255, 255, 255),
-            2,
-        )
-
-        # Display left-click instruction.
         cv2.putText(
             frame,
             "Index + Thumb = Left Click",
             (20, 75),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
+            0.5,
             (255, 255, 255),
-            2,
+            1,
         )
 
-        # Display double-click instruction.
         cv2.putText(
             frame,
-            "Pinch Twice = Double Click",
-            (20, 105),
+            "Hold Index + Thumb = Drag",
+            (20, 100),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
+            0.5,
             (255, 255, 255),
-            2,
+            1,
         )
 
-        # Display right-click instruction.
         cv2.putText(
             frame,
             "Middle + Thumb = Right Click",
-            (20, 135),
+            (20, 125),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
+            0.5,
             (255, 255, 255),
-            2,
+            1,
         )
 
-        # Display quit instruction.
+        cv2.putText(
+            frame,
+            "Ring + Thumb = Double Click",
+            (20, 150),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+
+        cv2.putText(
+            frame,
+            "Index + Middle = Scroll",
+            (20, 175),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+
         cv2.putText(
             frame,
             "Q = Quit",
-            (20, 165),
+            (20, frame.shape[0] - 20),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            2,
+            0.5,
+            (200, 200, 200),
+            1,
         )
 
-        # Display camera feed.
         cv2.imshow(
-            "GestureFlow - Hand Tracking",
-            frame
+            "GestureFlow",
+            frame,
         )
 
-        # Press Q to quit.
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        key = cv2.waitKey(1) & 0xFF
+
+        # -----------------------------------------------------
+        # Quit.
+        # -----------------------------------------------------
+
+        if key == ord("q"):
             break
 
+        # -----------------------------------------------------
+        # Reset cursor smoothing.
+        # -----------------------------------------------------
+
+        if key == ord("r"):
+            cursor_controller.reset()
+
+    # ---------------------------------------------------------
     # Cleanup.
-    hand_detector.close()
-    camera.release()
+    # ---------------------------------------------------------
+
+    if mouse_button_down:
+        pyautogui.mouseUp()
+
+    cap.release()
     cv2.destroyAllWindows()
+    hand_detector.close()
 
 
 if __name__ == "__main__":
     main()
+

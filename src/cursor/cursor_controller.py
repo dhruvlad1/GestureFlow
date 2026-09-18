@@ -8,60 +8,73 @@ class CursorController:
 
     def __init__(
         self,
-        smoothing=1,
-        margin=0.1,
+        smoothing=1.0,
+        camera_min_x=0.10,
+        camera_max_x=0.90,
+        camera_min_y=0.10,
+        camera_max_y=0.90,
         screen_padding=5,
     ):
         """
         smoothing:
-            Controls cursor responsiveness.
-            1.0 = no smoothing / maximum responsiveness.
+            1.0 = maximum responsiveness.
+            Lower values provide more smoothing.
 
-        margin:
-            Percentage of the camera frame excluded from the
-            movement area.
+        camera_min_x / camera_max_x:
+            Usable horizontal hand movement range.
+
+        camera_min_y / camera_max_y:
+            Usable vertical hand movement range.
 
         screen_padding:
-            Minimum number of pixels kept away from the screen
-            edges to prevent PyAutoGUI fail-safe activation.
+            Small safety distance from the screen edges.
         """
 
         self.smoothing = smoothing
-        self.margin = margin
+
+        self.camera_min_x = camera_min_x
+        self.camera_max_x = camera_max_x
+
+        self.camera_min_y = camera_min_y
+        self.camera_max_y = camera_max_y
+
         self.screen_padding = screen_padding
 
-        self.screen_width, self.screen_height = (
-            pyautogui.size()
-        )
+        self.screen_width, self.screen_height = pyautogui.size()
 
         self.previous_x = None
         self.previous_y = None
 
     def map_coordinates(self, x, y):
         """
-        Convert normalized camera coordinates (0-1)
-        into safe screen coordinates.
+        Map the usable MediaPipe coordinate range directly
+        across the usable screen area.
         """
 
-        min_value = self.margin
-        max_value = 1.0 - self.margin
+        # Clamp camera coordinates to the usable range.
+        x = max(
+            self.camera_min_x,
+            min(x, self.camera_max_x),
+        )
 
-        # Restrict camera coordinates to the control area.
-        x = max(min_value, min(x, max_value))
-        y = max(min_value, min(y, max_value))
+        y = max(
+            self.camera_min_y,
+            min(y, self.camera_max_y),
+        )
 
-        # Convert to 0-1 range.
+        # Convert camera X to 0-1.
         x = (
-            (x - min_value)
-            / (max_value - min_value)
+            (x - self.camera_min_x)
+            / (self.camera_max_x - self.camera_min_x)
         )
 
+        # Convert camera Y to 0-1.
         y = (
-            (y - min_value)
-            / (max_value - min_value)
+            (y - self.camera_min_y)
+            / (self.camera_max_y - self.camera_min_y)
         )
 
-        # Keep cursor away from exact screen corners.
+        # Map to the usable screen area.
         min_screen_x = self.screen_padding
         max_screen_x = (
             self.screen_width
@@ -90,13 +103,12 @@ class CursorController:
 
     def smooth_coordinates(self, x, y):
         """
-        Apply exponential smoothing to cursor coordinates.
+        Apply exponential smoothing to screen coordinates.
         """
 
         if self.previous_x is None:
             self.previous_x = x
             self.previous_y = y
-
         else:
             self.previous_x = (
                 self.previous_x * (1 - self.smoothing)
@@ -113,43 +125,39 @@ class CursorController:
     def move_cursor(self, x, y):
         """
         Move the operating system cursor using normalized
-        hand coordinates.
+        MediaPipe hand coordinates.
         """
 
-        screen_x, screen_y = self.map_coordinates(
-            x,
-            y
-        )
+        screen_x, screen_y = self.map_coordinates(x, y)
 
         screen_x, screen_y = self.smooth_coordinates(
             screen_x,
-            screen_y
+            screen_y,
         )
 
         pyautogui.moveTo(
             int(screen_x),
             int(screen_y),
-            duration=0
+            duration=0,
         )
 
     def left_click(self):
-        """
-        Perform a left mouse click.
-        """
+        """Perform a left mouse click."""
 
         pyautogui.click()
 
     def right_click(self):
-        """
-        Perform a right mouse click.
-        """
+        """Perform a right mouse click."""
 
         pyautogui.rightClick()
 
+    def double_click(self):
+        """Perform a double mouse click."""
+
+        pyautogui.doubleClick()
+
     def reset(self):
-        """
-        Reset the smoothing state.
-        """
+        """Reset the cursor smoothing state."""
 
         self.previous_x = None
         self.previous_y = None
