@@ -4,6 +4,7 @@ import pyautogui
 from hand_tracking.hand_detector import HandDetector
 from gestures.gesture_detector import GestureDetector
 from cursor.cursor_controller import CursorController
+from visualization.overlay import Overlay
 from utils import config
 
 
@@ -45,6 +46,15 @@ def main():
     # ---------------------------------------------------------
 
     cursor_controller = CursorController()
+
+    # ---------------------------------------------------------
+    # Initialize visualization overlay.
+    #
+    # The overlay is responsible only for drawing information
+    # on the camera frame.
+    # ---------------------------------------------------------
+
+    overlay = Overlay()
 
     # MediaPipe VIDEO mode requires timestamps to increase
     # monotonically for the lifetime of the detector.
@@ -209,61 +219,8 @@ def main():
                     )
 
             # -------------------------------------------------
-            # Draw fingertips.
-            # -------------------------------------------------
-
-            height, width = frame.shape[:2]
-
-            index_tip_x = int(
-                landmarks[8].x * width
-            )
-
-            index_tip_y = int(
-                landmarks[8].y * height
-            )
-
-            middle_tip_x = int(
-                landmarks[12].x * width
-            )
-
-            middle_tip_y = int(
-                landmarks[12].y * height
-            )
-
-            ring_tip_x = int(
-                landmarks[16].x * width
-            )
-
-            ring_tip_y = int(
-                landmarks[16].y * height
-            )
-
-            cv2.circle(
-                frame,
-                (index_tip_x, index_tip_y),
-                8,
-                (0, 255, 0),
-                -1,
-            )
-
-            cv2.circle(
-                frame,
-                (middle_tip_x, middle_tip_y),
-                8,
-                (255, 0, 0),
-                -1,
-            )
-
-            cv2.circle(
-                frame,
-                (ring_tip_x, ring_tip_y),
-                8,
-                (0, 255, 255),
-                -1,
-            )
-
-            # -------------------------------------------------
-            # Display current gesture.
+            # Determine the gesture text shown on the camera
+            # overlay.
             # -------------------------------------------------
 
             display_gesture = gesture
@@ -303,26 +260,46 @@ def main():
             if mouse_button_down:
                 display_gesture = "DRAGGING"
 
-            cv2.putText(
+            # -------------------------------------------------
+            # Draw hand landmarks.
+            # -------------------------------------------------
+
+            overlay.draw_landmarks(
                 frame,
-                f"Gesture: {display_gesture}",
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 255),
-                2,
+                [
+                    (landmark.x, landmark.y)
+                    for landmark in landmarks
+                ],
+            )
+
+            # -------------------------------------------------
+            # Draw current gesture and tracking status.
+            # -------------------------------------------------
+
+            overlay.draw_gesture(
+                frame,
+                display_gesture,
+            )
+
+            overlay.draw_status(
+                frame,
+                "Hand detected",
             )
 
         else:
 
-            cv2.putText(
+            # -------------------------------------------------
+            # Display tracking status when no hand is detected.
+            # -------------------------------------------------
+
+            overlay.draw_status(
                 frame,
                 "No hand detected",
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 255),
-                2,
+            )
+
+            overlay.draw_gesture(
+                frame,
+                "NO HAND",
             )
 
             # Prevent a cursor jump when the hand disappears.
@@ -343,61 +320,71 @@ def main():
         cv2.putText(
             frame,
             "Index + Thumb = Left Click",
-            (20, 75),
+            (20, 145),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (255, 255, 255),
             1,
+            cv2.LINE_AA,
         )
 
         cv2.putText(
             frame,
             "Hold Index + Thumb = Drag",
-            (20, 100),
+            (20, 170),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (255, 255, 255),
             1,
+            cv2.LINE_AA,
         )
 
         cv2.putText(
             frame,
             "Middle + Thumb = Right Click",
-            (20, 125),
+            (20, 195),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (255, 255, 255),
             1,
+            cv2.LINE_AA,
         )
 
         cv2.putText(
             frame,
             "Ring + Thumb = Double Click",
-            (20, 150),
+            (20, 220),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (255, 255, 255),
             1,
+            cv2.LINE_AA,
         )
 
         cv2.putText(
             frame,
             "Index + Middle = Scroll",
-            (20, 175),
+            (20, 245),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (255, 255, 255),
             1,
+            cv2.LINE_AA,
         )
+
+        # -----------------------------------------------------
+        # Display keyboard controls at the bottom.
+        # -----------------------------------------------------
 
         cv2.putText(
             frame,
-            "Q = Quit",
+            "Q = Quit | R = Reset",
             (20, frame.shape[0] - 20),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (200, 200, 200),
             1,
+            cv2.LINE_AA,
         )
 
         cv2.imshow(
