@@ -6,7 +6,7 @@ It keeps camera processing separate from the user-interface
 thread.
 """
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, QThread, Qt, Signal
 
 
 class CameraController(QObject):
@@ -30,6 +30,12 @@ class CameraController(QObject):
 
     stopped = Signal()
 
+    paused_changed = Signal(bool)
+
+    stop_requested = Signal()
+
+    pause_requested = Signal(bool)
+
     def __init__(self):
         """
         Initialize the camera controller.
@@ -49,6 +55,8 @@ class CameraController(QObject):
         # -----------------------------------------------------
 
         self.running = False
+
+        self.paused = False
 
     # =========================================================
     # Start
@@ -121,11 +129,26 @@ class CameraController(QObject):
             self.on_worker_finished
         )
 
+        self.stop_requested.connect(
+            self.worker.stop,
+            Qt.ConnectionType.QueuedConnection,
+        )
+
+        self.pause_requested.connect(
+            self.worker.set_paused,
+            Qt.ConnectionType.QueuedConnection,
+        )
+
+        self.thread.finished.connect(
+            self.on_thread_finished
+        )
+
         # -----------------------------------------------------
         # Start the Qt thread.
         # -----------------------------------------------------
 
         self.running = True
+        self.paused = False
 
         self.thread.start()
 
@@ -144,12 +167,26 @@ class CameraController(QObject):
             return
 
         if self.worker is not None:
-
-            self.worker.stop()
+            self.stop_requested.emit()
 
         # -----------------------------------------------------
         # The worker will emit finished after cleanup.
         # -----------------------------------------------------
+
+    def set_paused(self, paused):
+        """Pause or resume gesture interaction without stopping capture."""
+
+        self.paused = paused
+
+        if self.worker is not None:
+            self.pause_requested.emit(paused)
+
+        self.paused_changed.emit(paused)
+
+    def toggle_paused(self):
+        """Toggle the current gesture interaction pause state."""
+
+        self.set_paused(not self.paused)
 
     # =========================================================
     # Worker completion
@@ -169,10 +206,6 @@ class CameraController(QObject):
         if self.thread is not None:
 
             self.thread.quit()
-
-            self.thread.finished.connect(
-                self.on_thread_finished
-            )
 
         else:
 
@@ -202,6 +235,8 @@ class CameraController(QObject):
         self.thread = None
 
         self.running = False
+
+        self.paused = False
 
     # =========================================================
     # Status

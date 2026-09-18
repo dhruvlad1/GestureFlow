@@ -7,7 +7,7 @@ the Qt user-interface thread.
 
 import cv2
 
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from hand_tracking.hand_detector import HandDetector
 from gestures.gesture_detector import GestureDetector
@@ -53,6 +53,8 @@ class CameraWorker(QObject):
 
         self.running = False
 
+        self.paused = False
+
         self.cap = None
 
         self.timestamp_ms = 0
@@ -71,6 +73,9 @@ class CameraWorker(QObject):
 
         self.overlay = None
 
+        self.frame_timer = None
+        self.finished_emitted = False
+
     # =========================================================
     # Worker lifecycle
     # =========================================================
@@ -86,6 +91,8 @@ class CameraWorker(QObject):
         if self.running:
             return
 
+        self.finished_emitted = False
+
         # -----------------------------------------------------
         # Open camera.
         # -----------------------------------------------------
@@ -99,7 +106,7 @@ class CameraWorker(QObject):
                 "Could not open camera."
             )
 
-            self.finished.emit()
+            self.finish()
 
             return
 
@@ -123,52 +130,17 @@ class CameraWorker(QObject):
                 f"Failed to initialize GestureFlow: {exc}"
             )
 
-            self.cleanup()
-
-            self.finished.emit()
+            self.finish()
 
             return
 
-        # -----------------------------------------------------
-        # Start processing.
-        # -----------------------------------------------------
-
         self.running = True
+        self.paused = False
 
-        self.status_changed.emit(
-            "Camera active"
-        )
-
-        # -----------------------------------------------------
-        # Camera processing loop.
-        # -----------------------------------------------------
-
-        while self.running:
-
-            ret, frame = self.cap.read()
-
-            if not ret:
-                self.error.emit(
-                    "Failed to read camera frame."
-                )
-
-                break
-
-            frame = self.process_frame(
-                frame
-            )
-
-            self.frame_ready.emit(
-                frame
-            )
-
-        # -----------------------------------------------------
-        # Worker has stopped.
-        # -----------------------------------------------------
-
-        self.cleanup()
-
-        self.finished.emit()
+        self.frame_timer = QTimer(self)
+        self.frame_timer.setInterval(0)
+        self.frame_timer.timeout.connect(self.process_next_frame)
+        self.frame_timer.start()
 
     @Slot()
     def stop(self):
@@ -176,7 +148,42 @@ class CameraWorker(QObject):
         Request the camera-processing loop to stop.
         """
 
+        if not self.running and self.finished_emitted:
+            return
+
         self.running = False
+        self.finish()
+
+    def set_paused(self, paused):
+        """Pause gesture actions while keeping camera processing alive."""
+
+        self.paused = paused
+
+    @Slot()
+    def process_next_frame(self):
+        """Read and process one frame from the worker thread."""
+
+        if not self.running or self.cap is None:
+            return
+
+        try:
+            ret, frame = self.cap.read()
+
+            if not ret:
+                self.error.emit(
+                    "Failed to read camera frame."
+                )
+                self.running = False
+                self.finish()
+                return
+
+            frame = self.process_frame(frame)
+            self.frame_ready.emit(frame)
+
+        except Exception as exc:
+            self.error.emit(f"Camera processing failed: {exc}")
+            self.running = False
+            self.finish()
 
     # =========================================================
     # Frame processing
@@ -198,6 +205,9 @@ class CameraWorker(QObject):
             frame,
             1,
         )
+
+        if self.paused:
+            return frame
 
         self.timestamp_ms += 1
 
@@ -499,6 +509,11 @@ class CameraWorker(QObject):
 
             self.cap = None
 
+        if self.frame_timer is not None:
+            self.frame_timer.stop()
+            self.frame_timer.deleteLater()
+            self.frame_timer = None
+
         # -----------------------------------------------------
         # Release MediaPipe detector.
         # -----------------------------------------------------
@@ -518,3 +533,14 @@ class CameraWorker(QObject):
         self.cursor_controller = None
 
         self.overlay = None
+
+    def finish(self):
+        """Clean up once and notify the controller exactly once."""
+
+        if self.finished_emitted:
+            return
+
+        self.finished_emitted = True
+        self.running = False
+        self.cleanup()
+        self.finished.emit()

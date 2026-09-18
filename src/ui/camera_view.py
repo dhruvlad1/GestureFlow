@@ -29,9 +29,11 @@ class CameraView(QLabel):
         # -----------------------------------------------------
 
         self.setMinimumSize(
-            640,
-            360,
+            320,
+            200,
         )
+
+        self._source_pixmap = QPixmap()
 
         self.setAlignment(
             Qt.AlignmentFlag.AlignCenter
@@ -47,6 +49,10 @@ class CameraView(QLabel):
 
         self.setScaledContents(
             False
+        )
+
+        self.setObjectName(
+            "cameraView"
         )
 
     def display_frame(self, frame):
@@ -99,15 +105,28 @@ class CameraView(QLabel):
             image
         )
 
-        scaled_pixmap = pixmap.scaled(
+        self._source_pixmap = pixmap
+        self._update_pixmap()
+
+    def resizeEvent(self, event):
+        """Keep the live preview fitted when the window is resized."""
+
+        super().resizeEvent(event)
+        self._update_pixmap()
+
+    def _update_pixmap(self):
+        """Scale the source image without changing its aspect ratio."""
+
+        if self._source_pixmap.isNull():
+            return
+
+        scaled_pixmap = self._source_pixmap.scaled(
             self.size(),
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
 
-        self.setPixmap(
-            scaled_pixmap
-        )
+        self.setPixmap(scaled_pixmap)
 
     def clear_frame(self):
         """
@@ -116,6 +135,8 @@ class CameraView(QLabel):
         """
 
         self.clear()
+
+        self._source_pixmap = QPixmap()
 
         self.setText(
             "Camera preview"

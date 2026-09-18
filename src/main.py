@@ -1,19 +1,24 @@
-"""
-GestureFlow application entry point.
+"""GestureFlow Qt application entry point."""
 
-The main application logic is handled by GestureFlowApp.
-"""
+import sys
 
-from app.application import GestureFlowApp
+from PySide6.QtWidgets import QApplication
+
+from ui.main_window import MainWindow
 
 
 def main():
     """
-    Create and run the GestureFlow application.
+    Create and run the GestureFlow desktop utility.
     """
 
-    app = GestureFlowApp()
-    app.run()
+    application = QApplication(sys.argv)
+    application.setQuitOnLastWindowClosed(False)
+
+    window = MainWindow(application)
+    window.show()
+
+    sys.exit(application.exec())
 
 
 if __name__ == "__main__":
