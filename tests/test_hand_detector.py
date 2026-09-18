@@ -11,6 +11,7 @@ Run with:
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import cv2
@@ -315,6 +316,89 @@ def test_find_hands_returns_mediapipe_result():
         )
 
     assert result is expected_result
+
+
+def test_get_handedness_label_reads_mediapipe_result():
+    """HandDetector should expose MediaPipe's hand role label."""
+
+    results = MagicMock()
+    results.handedness = [
+        [MagicMock(category_name="Right")],
+        [MagicMock(category_name="Left")],
+    ]
+
+    assert HandDetector.get_handedness_label(results, 0) == "Left"
+    assert HandDetector.get_handedness_label(results, 1) == "Right"
+
+
+def test_get_handedness_label_handles_missing_metadata():
+    """Missing handedness must not invent a pointer/action role."""
+
+    results = SimpleNamespace(handedness=[])
+
+    assert HandDetector.get_handedness_label(results, 0) is None
+
+
+def test_get_handedness_label_normalizes_case_and_whitespace():
+    results = SimpleNamespace(
+        handedness=[
+            [MagicMock(category_name=" right ")],
+        ]
+    )
+
+    assert HandDetector.get_handedness_label(results, 0) == "Left"
+
+
+def test_physical_handedness_swaps_labels_for_mirrored_input():
+    results = SimpleNamespace(
+        handedness=[
+            [MagicMock(category_name="Left")],
+            [MagicMock(category_name="Right")],
+        ]
+    )
+
+    assert (
+        HandDetector.get_physical_handedness_label(
+            results,
+            0,
+            input_is_mirrored=True,
+        )
+        == "Right"
+    )
+    assert (
+        HandDetector.get_physical_handedness_label(
+            results,
+            1,
+            input_is_mirrored=True,
+        )
+        == "Left"
+    )
+
+
+def test_physical_handedness_preserves_labels_for_unmirrored_input():
+    results = SimpleNamespace(
+        handedness=[
+            [MagicMock(category_name="Left")],
+            [MagicMock(category_name="Right")],
+        ]
+    )
+
+    assert (
+        HandDetector.get_physical_handedness_label(
+            results,
+            0,
+            input_is_mirrored=False,
+        )
+        == "Left"
+    )
+    assert (
+        HandDetector.get_physical_handedness_label(
+            results,
+            1,
+            input_is_mirrored=False,
+        )
+        == "Right"
+    )
 
 
 # =============================================================

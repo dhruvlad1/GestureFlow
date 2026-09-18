@@ -32,6 +32,8 @@ class CameraWorker(QObject):
 
     frame_ready = Signal(object)
 
+    ready = Signal()
+
     status_changed = Signal(str)
 
     gesture_changed = Signal(str)
@@ -141,6 +143,7 @@ class CameraWorker(QObject):
         self.frame_timer.setInterval(0)
         self.frame_timer.timeout.connect(self.process_next_frame)
         self.frame_timer.start()
+        self.ready.emit()
 
     @Slot()
     def stop(self):
@@ -158,6 +161,10 @@ class CameraWorker(QObject):
         """Pause gesture actions while keeping camera processing alive."""
 
         self.paused = paused
+
+        if paused and self.mouse_button_down:
+            pyautogui.mouseUp()
+            self.mouse_button_down = False
 
     @Slot()
     def process_next_frame(self):
@@ -216,58 +223,90 @@ class CameraWorker(QObject):
             self.timestamp_ms,
         )
 
-        landmarks = None
+        landmarks_by_role = {
+            "Left": None,
+            "Right": None,
+        }
 
         if results and results.hand_landmarks:
-            landmarks = results.hand_landmarks[0]
+            for index, landmarks in enumerate(
+                results.hand_landmarks
+            ):
+                label = HandDetector.get_physical_handedness_label(
+                    results,
+                    index,
+                    input_is_mirrored=(
+                        HandDetector.INPUT_IS_MIRRORED
+                    ),
+                )
+
+                if label in landmarks_by_role:
+                    landmarks_by_role[label] = landmarks
+
+        right_landmarks = landmarks_by_role["Right"]
+        left_landmarks = landmarks_by_role["Left"]
+
+        right_hand = self.gesture_detector.get_hand(
+            right_landmarks,
+            handedness="Right",
+        )
+        left_hand = self.gesture_detector.get_hand(
+            left_landmarks,
+            handedness="Left",
+        )
+
+        if right_hand is not None:
+            index_tip = right_hand.index_tip
+
+            self.cursor_controller.move_cursor(
+                index_tip.x,
+                index_tip.y,
+            )
+
+        action = self.gesture_detector.detect_action_gesture(
+            left_hand
+        )
+
+        is_scrolling = (
+            left_hand is not None
+            and self.gesture_detector.is_scroll_gesture_active(
+                left_hand
+            )
+        )
+
+        scroll = self.gesture_detector.detect_scroll(
+            left_hand
+        )
+
+        gesture = action
+
+        if gesture is None and scroll != 0:
+            gesture = scroll
+
+        if (
+            gesture is None
+            and self.gesture_detector.horizontal_scroll_amount != 0
+        ):
+            gesture = "HORIZONTAL_SCROLL"
+
+        if right_hand is None and self.mouse_button_down:
+            pyautogui.mouseUp()
+            self.mouse_button_down = False
+            self.gesture_detector.reset()
+            gesture = None
+
+        self.handle_gesture(gesture)
+
+        landmarks = []
+
+        for hand_landmarks in (
+            right_landmarks,
+            left_landmarks,
+        ):
+            if hand_landmarks:
+                landmarks.extend(hand_landmarks)
 
         if landmarks:
-
-            # -------------------------------------------------
-            # Convert landmarks into HandData.
-            # -------------------------------------------------
-
-            hand = self.gesture_detector.get_hand(
-                landmarks
-            )
-
-            if hand is None:
-                return frame
-
-            # -------------------------------------------------
-            # Detect gesture.
-            # -------------------------------------------------
-
-            gesture = self.gesture_detector.detect_gesture(
-                hand
-            )
-
-            is_scrolling = (
-                self.gesture_detector.is_scroll_gesture_active(
-                    hand
-                )
-            )
-
-            # -------------------------------------------------
-            # Move cursor unless the user is scrolling.
-            # -------------------------------------------------
-
-            if not is_scrolling:
-
-                index_tip = landmarks[8]
-
-                self.cursor_controller.move_cursor(
-                    index_tip.x,
-                    index_tip.y,
-                )
-
-            # -------------------------------------------------
-            # Execute mouse action.
-            # -------------------------------------------------
-
-            self.handle_gesture(
-                gesture
-            )
 
             # -------------------------------------------------
             # Determine display gesture.

@@ -16,6 +16,7 @@ if str(SRC_PATH) not in sys.path:
 
 from app.camera_controller import CameraController
 from app.camera_worker import CameraWorker
+from app.state import ApplicationState
 
 
 def test_worker_stop_releases_resources_and_finishes_once():
@@ -96,3 +97,61 @@ def test_controller_rejects_duplicate_start():
     controller.thread.quit()
     controller.thread.wait()
     app.processEvents()
+
+
+def test_valid_state_transitions():
+    controller = CameraController()
+
+    assert controller.transition_to(ApplicationState.STARTING)
+    assert controller.transition_to(ApplicationState.ACTIVE)
+    assert controller.transition_to(ApplicationState.PAUSED)
+    assert controller.transition_to(ApplicationState.ACTIVE)
+    assert controller.transition_to(ApplicationState.STOPPING)
+    assert controller.transition_to(ApplicationState.INACTIVE)
+
+
+def test_starting_error_and_error_recovery():
+    controller = CameraController()
+
+    assert controller.transition_to(ApplicationState.STARTING)
+    assert controller.transition_to(ApplicationState.ERROR)
+    controller.thread = MagicMock()
+    assert not controller.start()
+    controller.thread = None
+    assert controller.transition_to(ApplicationState.INACTIVE)
+    assert controller.transition_to(ApplicationState.STARTING)
+
+
+def test_invalid_state_transitions_are_rejected():
+    controller = CameraController()
+
+    assert not controller.transition_to(ApplicationState.PAUSED)
+    assert not controller.transition_to(ApplicationState.STOPPING)
+
+    assert controller.transition_to(ApplicationState.STARTING)
+    assert not controller.transition_to(ApplicationState.STOPPING)
+    assert controller.transition_to(ApplicationState.ACTIVE)
+    assert not controller.transition_to(ApplicationState.STARTING)
+
+
+def test_repeated_start_stop_state_cycles():
+    controller = CameraController()
+
+    for _ in range(2):
+        assert controller.transition_to(ApplicationState.STARTING)
+        assert controller.transition_to(ApplicationState.ACTIVE)
+        assert controller.transition_to(ApplicationState.STOPPING)
+        assert controller.transition_to(ApplicationState.INACTIVE)
+
+
+def test_pause_resume_stop_state_sequence():
+    controller = CameraController()
+
+    assert controller.transition_to(ApplicationState.STARTING)
+    assert controller.transition_to(ApplicationState.ACTIVE)
+    assert controller.set_paused(True)
+    assert controller.state == ApplicationState.PAUSED
+    assert controller.set_paused(False)
+    assert controller.state == ApplicationState.ACTIVE
+    assert controller.stop()
+    assert controller.state == ApplicationState.STOPPING

@@ -12,7 +12,7 @@ configuration values.
 # =============================================================
 
 # Number of hands that MediaPipe should track.
-MAX_NUM_HANDS = 1
+MAX_NUM_HANDS = 2
 
 # Minimum confidence required to initially detect a hand.
 MIN_DETECTION_CONFIDENCE = 0.7
@@ -41,6 +41,9 @@ FINGER_EXTENSION_ANGLE = 160
 # Number of consecutive frames required to confirm a click gesture.
 CLICK_STABLE_FRAMES = 3
 
+# Minimum time between left and double-click actions.
+CLICK_COOLDOWN = 0.25
+
 # Minimum time between consecutive right clicks.
 RIGHT_CLICK_COOLDOWN = 0.4
 
@@ -61,6 +64,9 @@ SCROLL_SPEED = 60
 # Minimum movement required to select or change the scroll
 # direction.
 SCROLL_DIRECTION_CHANGE_THRESHOLD = 0.012
+
+# Ratio required for one axis to dominate diagonal movement.
+SCROLL_AXIS_DOMINANCE = 1.25
 
 # Time interval between continuous scroll events.
 #

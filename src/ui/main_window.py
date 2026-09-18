@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.camera_controller import CameraController
+from app.state import ApplicationState
 from ui.camera_preview_window import CameraPreviewWindow
 from ui.control_panel import ControlPanel
 from ui.settings import SettingsDialog
@@ -114,11 +115,8 @@ class MainWindow(QMainWindow):
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self.on_tray_activated)
 
-        self.camera_controller.started.connect(
-            lambda: self.update_tray_state("Active")
-        )
-        self.camera_controller.stopped.connect(
-            lambda: self.update_tray_state("Inactive")
+        self.camera_controller.state_changed.connect(
+            self.update_tray_state
         )
         self.camera_controller.paused_changed.connect(
             self.update_pause_tray_state
@@ -131,7 +129,10 @@ class MainWindow(QMainWindow):
         if self.preview_window.isVisible():
             self.preview_window.hide()
             self.control_panel.set_camera_visible(False)
-        elif self.camera_controller.is_running():
+        elif self.camera_controller.state in (
+            ApplicationState.ACTIVE,
+            ApplicationState.PAUSED,
+        ):
             self.preview_window.show()
             self.preview_window.raise_()
             self.preview_window.activateWindow()
@@ -163,8 +164,15 @@ class MainWindow(QMainWindow):
         self.update_camera_tray_text()
 
     def update_tray_state(self, state):
-        self.tray_status_action.setText(f"Status: {state}")
-        self.tray_pause_action.setEnabled(state != "Inactive")
+        self.tray_status_action.setText(
+            f"Status: {state.value}"
+        )
+        self.tray_pause_action.setEnabled(
+            state in (
+                ApplicationState.ACTIVE,
+                ApplicationState.PAUSED,
+            )
+        )
         self.update_camera_tray_text()
 
     def update_pause_tray_state(self, paused):
@@ -185,9 +193,10 @@ class MainWindow(QMainWindow):
         self.preview_window.hide()
         self.tray.hide()
 
-        if self.camera_controller.is_running():
+        if self.camera_controller.state != ApplicationState.INACTIVE:
             self.camera_controller.stop()
-        else:
+
+        if self.camera_controller.state == ApplicationState.INACTIVE:
             self.finish_exit()
 
     def finish_exit(self):

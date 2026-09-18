@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.state import ApplicationState
+
 class ControlPanel(QWidget):
     """Small utility panel that controls and reports application state."""
 
@@ -186,11 +188,8 @@ class ControlPanel(QWidget):
         self.camera_button.clicked.connect(self.show_camera_requested)
         self.settings_button.clicked.connect(self.settings_requested)
 
-        self.camera_controller.started.connect(
-            lambda: self.update_running_state(True)
-        )
-        self.camera_controller.stopped.connect(
-            lambda: self.update_running_state(False)
+        self.camera_controller.state_changed.connect(
+            self.update_state
         )
         self.camera_controller.status_changed.connect(
             self.update_hand_status
@@ -203,14 +202,7 @@ class ControlPanel(QWidget):
         )
 
     def toggle_pause(self):
-        if not self.camera_controller.is_running():
-            return
-
-        self.paused = not self.paused
-        self.camera_controller.set_paused(self.paused)
-        self.pause_button.setText("Resume" if self.paused else "Pause")
-        self.set_value(self.control_status[1], "Paused" if self.paused else "Active")
-        self.status_indicator.setText("●  Paused" if self.paused else "●  Active")
+        self.camera_controller.toggle_paused()
 
     def start_camera(self):
         self.camera_controller.start()
@@ -219,24 +211,78 @@ class ControlPanel(QWidget):
         self.camera_controller.stop()
 
     def update_running_state(self, running):
-        self.start_button.setEnabled(not running)
-        self.stop_button.setEnabled(running)
-        self.pause_button.setEnabled(running)
-        self.camera_button.setEnabled(running)
+        state = (
+            ApplicationState.ACTIVE
+            if running
+            else ApplicationState.INACTIVE
+        )
+        self.update_state(state)
 
-        if not running:
+    def update_state(self, state):
+        starting = state == ApplicationState.STARTING
+        active = state == ApplicationState.ACTIVE
+        paused = state == ApplicationState.PAUSED
+        stopping = state == ApplicationState.STOPPING
+        error = state == ApplicationState.ERROR
+
+        self.start_button.setEnabled(
+            state in (
+                ApplicationState.INACTIVE,
+                ApplicationState.ERROR,
+            )
+        )
+        self.stop_button.setEnabled(
+            state in (
+                ApplicationState.STARTING,
+                ApplicationState.ACTIVE,
+                ApplicationState.PAUSED,
+                ApplicationState.STOPPING,
+            )
+        )
+        self.pause_button.setEnabled(active or paused)
+        self.camera_button.setEnabled(active or paused)
+
+        self.paused = paused
+        self.pause_button.setText("Resume" if paused else "Pause")
+
+        if starting:
+            control_value = "Starting"
+            camera_value = "Starting"
+            status_text = "●  Starting"
+        elif active:
+            control_value = "Active"
+            camera_value = "Active"
+            status_text = "●  Active"
+        elif paused:
+            control_value = "Paused"
+            camera_value = "Active"
+            status_text = "●  Paused"
+        elif stopping:
+            control_value = "Stopping"
+            camera_value = "Stopping"
+            status_text = "●  Stopping"
+        elif error:
+            control_value = "Error"
+            camera_value = "Error"
+            status_text = "●  Error"
+        else:
+            control_value = "Inactive"
+            camera_value = "Inactive"
+            status_text = "●  Inactive"
+
+        self.set_value(self.control_status[1], control_value)
+        self.set_value(self.camera_status[1], camera_value)
+        self.status_indicator.setText(status_text)
+
+        if state == ApplicationState.INACTIVE:
             self.paused = False
             self.pause_button.setText("Pause")
-            self.set_value(self.control_status[1], "Inactive")
             self.set_value(self.camera_status[1], "Inactive")
             self.set_value(self.hand_status[1], "Inactive")
-            self.status_indicator.setText("●  Inactive")
             self.gesture_value.setText("Waiting")
 
-        else:
-            self.set_value(self.control_status[1], "Active")
-            self.set_value(self.camera_status[1], "Active")
-            self.status_indicator.setText("●  Active")
+        elif error:
+            self.set_value(self.hand_status[1], "Pipeline error")
 
     def update_hand_status(self, status):
         self.set_value(self.hand_status[1], status)

@@ -7,11 +7,13 @@ from utils.config import (
     PINCH_RELEASE_THRESHOLD,
     FINGER_EXTENSION_ANGLE,
     CLICK_STABLE_FRAMES,
+    CLICK_COOLDOWN,
     RIGHT_CLICK_COOLDOWN,
     DRAG_HOLD_DURATION,
     SCROLL_THRESHOLD,
     SCROLL_SPEED,
     SCROLL_DIRECTION_CHANGE_THRESHOLD,
+    SCROLL_AXIS_DOMINANCE,
     SCROLL_UPDATE_INTERVAL,
 )
 
@@ -23,6 +25,7 @@ class HandData:
     """
 
     landmarks: list
+    handedness: str | None = None
 
     @property
     def wrist(self):
@@ -133,20 +136,9 @@ class GestureDetector:
     """
     Detects hand gestures and converts them into mouse actions.
 
-    Gestures:
-
-        Index + Thumb
-            -> Left Click
-            -> Drag when held
-
-        Middle + Thumb
-            -> Right Click
-
-        Ring + Thumb
-            -> Double Click
-
-        Index + Middle
-            -> Continuous vertical / horizontal scrolling
+    The left hand supplies edge-triggered mouse actions while
+    the right hand supplies cursor position. The exact action
+    state machine is implemented by detect_action_gesture().
     """
 
     # ---------------------------------------------------------
@@ -159,6 +151,7 @@ class GestureDetector:
         pinch_release_threshold=PINCH_RELEASE_THRESHOLD,
         finger_extension_angle=FINGER_EXTENSION_ANGLE,
         click_stable_frames=CLICK_STABLE_FRAMES,
+        click_cooldown=CLICK_COOLDOWN,
         right_click_cooldown=RIGHT_CLICK_COOLDOWN,
         drag_hold_duration=DRAG_HOLD_DURATION,
         scroll_threshold=SCROLL_THRESHOLD,
@@ -166,6 +159,7 @@ class GestureDetector:
         scroll_direction_change_threshold=(
             SCROLL_DIRECTION_CHANGE_THRESHOLD
         ),
+        scroll_axis_dominance=SCROLL_AXIS_DOMINANCE,
         scroll_update_interval=SCROLL_UPDATE_INTERVAL,
     ):
 
@@ -174,6 +168,7 @@ class GestureDetector:
         self.finger_extension_angle = finger_extension_angle
 
         self.click_stable_frames = click_stable_frames
+        self.click_cooldown = click_cooldown
         self.right_click_cooldown = right_click_cooldown
         self.drag_hold_duration = drag_hold_duration
 
@@ -188,6 +183,8 @@ class GestureDetector:
             scroll_direction_change_threshold
         )
 
+        self.scroll_axis_dominance = scroll_axis_dominance
+
         self.scroll_update_interval = scroll_update_interval
 
         # -----------------------------------------------------
@@ -195,15 +192,25 @@ class GestureDetector:
         # -----------------------------------------------------
 
         self.previous_left_pinching = False
+        self.left_pinch_active = False
         self.left_stable_count = 0
         self.left_pinch_start_time = None
         self.dragging = False
+        self.last_left_click_time = 0
+
+        # -----------------------------------------------------
+        # Two-hand action state.
+        # -----------------------------------------------------
+
+        self.previous_action_gesture = None
+        self.action_dragging = False
 
         # -----------------------------------------------------
         # Right click state.
         # -----------------------------------------------------
 
         self.previous_right_pinching = False
+        self.right_pinch_active = False
         self.right_stable_count = 0
         self.last_right_click_time = 0
 
@@ -212,7 +219,9 @@ class GestureDetector:
         # -----------------------------------------------------
 
         self.previous_double_click_pinching = False
+        self.double_pinch_active = False
         self.double_click_stable_count = 0
+        self.last_double_click_time = 0
 
         # -----------------------------------------------------
         # Continuous scroll state.
@@ -324,7 +333,7 @@ class GestureDetector:
     # =========================================================
 
     @staticmethod
-    def get_hand(landmarks):
+    def get_hand(landmarks, handedness=None):
         """
         Convert raw MediaPipe landmarks into HandData.
 
@@ -338,7 +347,7 @@ class GestureDetector:
         if isinstance(landmarks, HandData):
             return landmarks
 
-        return HandData(landmarks)
+        return HandData(landmarks, handedness)
 
     # =========================================================
     # Pinch detection
@@ -414,22 +423,211 @@ class GestureDetector:
 
         return angle >= self.finger_extension_angle
 
+    def is_pinky_extended(self, hand):
+        angle = self.calculate_angle(
+            hand.pinky_mcp,
+            hand.pinky_pip,
+            hand.pinky_tip,
+        )
+
+        return angle >= self.finger_extension_angle
+
+    def is_thumb_extended(self, hand):
+        angle = self.calculate_angle(
+            hand.thumb_cmc,
+            hand.thumb_mcp,
+            hand.thumb_tip,
+        )
+
+        return angle >= self.finger_extension_angle
+
+    def is_open_palm(self, hand):
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return False
+
+        return all(
+            (
+                self.is_thumb_extended(hand),
+                self.is_index_extended(hand),
+                self.is_middle_extended(hand),
+                self.is_ring_extended(hand),
+                self.is_pinky_extended(hand),
+            )
+        )
+
+    def is_closed_fist(self, hand):
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return False
+
+        return not any(
+            (
+                self.is_thumb_extended(hand),
+                self.is_index_extended(hand),
+                self.is_middle_extended(hand),
+                self.is_ring_extended(hand),
+                self.is_pinky_extended(hand),
+            )
+        )
+
+    def is_index_only(self, hand):
+        """Return whether only the index finger is extended."""
+
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return False
+
+        return (
+            self.is_index_extended(hand)
+            and not self.is_thumb_extended(hand)
+            and not self.is_middle_extended(hand)
+            and not self.is_ring_extended(hand)
+            and not self.is_pinky_extended(hand)
+        )
+
+    def is_middle_only(self, hand):
+        """Return whether only the middle finger is extended."""
+
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return False
+
+        return (
+            self.is_middle_extended(hand)
+            and not self.is_thumb_extended(hand)
+            and not self.is_index_extended(hand)
+            and not self.is_ring_extended(hand)
+            and not self.is_pinky_extended(hand)
+        )
+
+    def is_pinky_only(self, hand):
+        """Return whether only the pinky finger is extended."""
+
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return False
+
+        return (
+            self.is_pinky_extended(hand)
+            and not self.is_thumb_extended(hand)
+            and not self.is_index_extended(hand)
+            and not self.is_middle_extended(hand)
+            and not self.is_ring_extended(hand)
+        )
+
+    def detect_action_gesture(self, hand):
+        """Detect edge-triggered actions from the left hand."""
+
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            if self.action_dragging:
+                self.action_dragging = False
+                self.previous_action_gesture = None
+                return "DRAG_END"
+
+            self.previous_action_gesture = None
+            return None
+
+        if self.is_scroll_gesture_active(hand):
+            if self.action_dragging:
+                self.action_dragging = False
+                self.previous_action_gesture = None
+                return "DRAG_END"
+
+            self.previous_action_gesture = None
+            return None
+
+        if self.is_open_palm(hand):
+            if self.action_dragging:
+                self.action_dragging = False
+                self.previous_action_gesture = None
+                return "DRAG_END"
+
+            self.previous_action_gesture = "OPEN_PALM"
+            return None
+
+        if self.is_closed_fist(hand):
+            if not self.action_dragging:
+                self.action_dragging = True
+                self.previous_action_gesture = "CLOSED_FIST"
+                return "DRAG_START"
+
+            self.previous_action_gesture = "CLOSED_FIST"
+            return "DRAGGING"
+
+        if self.action_dragging:
+            self.action_dragging = False
+            self.previous_action_gesture = None
+            return "DRAG_END"
+
+        if self.is_index_only(hand):
+            if self.previous_action_gesture != "INDEX_ONLY":
+                self.previous_action_gesture = "INDEX_ONLY"
+                return "LEFT_CLICK"
+
+            return None
+
+        if self.is_middle_only(hand):
+            if self.previous_action_gesture != "MIDDLE_ONLY":
+                self.previous_action_gesture = "MIDDLE_ONLY"
+                return "DOUBLE_CLICK"
+
+            return None
+
+        if self.is_pinky_only(hand):
+            if self.previous_action_gesture != "PINKY_ONLY":
+                self.previous_action_gesture = "PINKY_ONLY"
+                return "RIGHT_CLICK"
+
+            return None
+
+        self.previous_action_gesture = None
+        return None
+
     # =========================================================
     # Left click / drag
     # =========================================================
 
+    def _update_pinch_state(
+        self,
+        point_a,
+        point_b,
+        active,
+    ):
+        """Apply hysteresis so small tracking noise cannot toggle a pinch."""
+
+        distance = self.distance(point_a, point_b)
+
+        if active:
+            return distance < self.pinch_release_threshold
+
+        return distance < self.pinch_start_threshold
+
     def _update_left_gesture(self, hand):
 
-        pinching = self.is_thumb_index_pinching(hand)
+        self.left_pinch_active = self._update_pinch_state(
+            hand.thumb_tip,
+            hand.index_tip,
+            self.left_pinch_active,
+        )
 
         middle_extended = self.is_middle_extended(hand)
 
         ring_pinching = self.is_thumb_ring_pinching(hand)
+        middle_pinching = self.is_thumb_middle_pinching(hand)
 
         valid = (
-            pinching
+            self.left_pinch_active
             and middle_extended
             and not ring_pinching
+            and not middle_pinching
         )
 
         if valid:
@@ -444,6 +642,11 @@ class GestureDetector:
         )
 
     def detect_left_action(self, hand):
+
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return None
 
         valid = self._update_left_gesture(hand)
 
@@ -483,9 +686,12 @@ class GestureDetector:
                 self.left_pinch_start_time is not None
                 and now - self.left_pinch_start_time
                 < self.drag_hold_duration
+                and now - self.last_left_click_time
+                >= self.click_cooldown
             ):
 
                 action = "LEFT_CLICK"
+                self.last_left_click_time = now
 
             self.left_pinch_start_time = None
 
@@ -499,7 +705,22 @@ class GestureDetector:
 
     def detect_right_click(self, hand):
 
-        pinching = self.is_thumb_middle_pinching(hand)
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return None
+
+        self.right_pinch_active = self._update_pinch_state(
+            hand.thumb_tip,
+            hand.middle_tip,
+            self.right_pinch_active,
+        )
+
+        pinching = (
+            self.right_pinch_active
+            and not self.is_thumb_index_pinching(hand)
+            and not self.is_thumb_ring_pinching(hand)
+        )
 
         if pinching:
             self.right_stable_count += 1
@@ -533,7 +754,22 @@ class GestureDetector:
 
     def detect_double_click(self, hand):
 
-        pinching = self.is_thumb_ring_pinching(hand)
+        hand = self.get_hand(hand)
+
+        if hand is None:
+            return None
+
+        self.double_pinch_active = self._update_pinch_state(
+            hand.thumb_tip,
+            hand.ring_tip,
+            self.double_pinch_active,
+        )
+
+        pinching = (
+            self.double_pinch_active
+            and not self.is_thumb_index_pinching(hand)
+            and not self.is_thumb_middle_pinching(hand)
+        )
 
         if pinching:
             self.double_click_stable_count += 1
@@ -547,9 +783,12 @@ class GestureDetector:
             and not self.previous_double_click_pinching
             and self.double_click_stable_count
             >= self.click_stable_frames
+            and monotonic() - self.last_double_click_time
+            >= self.click_cooldown
         ):
 
             action = "DOUBLE_CLICK"
+            self.last_double_click_time = monotonic()
 
         self.previous_double_click_pinching = pinching
 
@@ -563,7 +802,8 @@ class GestureDetector:
         """
         Detect the Index + Middle scroll gesture.
 
-        Both the index and middle fingers must be extended.
+        Index, middle, and thumb must be extended while ring
+        and pinky remain folded.
 
         Accepts either raw MediaPipe landmarks or HandData.
         """
@@ -574,8 +814,11 @@ class GestureDetector:
             return False
 
         return (
-            self.is_index_extended(hand)
+            self.is_thumb_extended(hand)
+            and self.is_index_extended(hand)
             and self.is_middle_extended(hand)
+            and not self.is_ring_extended(hand)
+            and not self.is_pinky_extended(hand)
         )
 
     def detect_scroll(self, hand):
@@ -584,7 +827,8 @@ class GestureDetector:
 
         Interaction:
 
-            1. Extend Index + Middle.
+            1. Extend Index + Middle + Thumb.
+            2. Keep Ring + Pinky folded.
             2. Move the hand up/down/left/right.
             3. The dominant movement direction is selected.
             4. Scrolling continues automatically.
@@ -601,6 +845,7 @@ class GestureDetector:
         can perform a horizontal mouse-wheel action.
         """
 
+        hand = self.get_hand(hand)
         active = self.is_scroll_gesture_active(hand)
 
         # Reset the horizontal amount at the beginning of
@@ -694,7 +939,10 @@ class GestureDetector:
             >= self.scroll_direction_change_threshold
         ):
 
-            if movement_y_abs > movement_x_abs:
+            if (
+                movement_y_abs
+                >= movement_x_abs * self.scroll_axis_dominance
+            ):
 
                 self.scroll_axis = "vertical"
 
@@ -703,7 +951,10 @@ class GestureDetector:
                 else:
                     self.scroll_direction = -1
 
-            else:
+            elif (
+                movement_x_abs
+                >= movement_y_abs * self.scroll_axis_dominance
+            ):
 
                 self.scroll_axis = "horizontal"
 
@@ -803,40 +1054,14 @@ class GestureDetector:
         hand = self.get_hand(landmarks)
 
         if hand is None:
+            self.reset()
             return None
 
-        # -----------------------------------------------------
-        # Double click.
-        # -----------------------------------------------------
-
-        double_click = self.detect_double_click(hand)
-
-        if double_click:
-            return double_click
-
-        # -----------------------------------------------------
-        # Left click / drag.
-        # -----------------------------------------------------
-
-        left_action = self.detect_left_action(hand)
-
-        if left_action:
-            return left_action
-
-        # -----------------------------------------------------
-        # Right click.
-        # -----------------------------------------------------
-
-        right_click = self.detect_right_click(hand)
-
-        if right_click:
-            return right_click
-
-        # -----------------------------------------------------
-        # Continuous scroll.
-        # -----------------------------------------------------
-
+        action = self.detect_action_gesture(hand)
         scroll = self.detect_scroll(hand)
+
+        if action:
+            return action
 
         if scroll != 0:
             return scroll
@@ -847,6 +1072,37 @@ class GestureDetector:
 
         return None
 
+    def _neutralize_gestures(self):
+        """Clear gesture history when the hand is explicitly neutral."""
+
+        drag_end = "DRAG_END" if self.action_dragging else None
+        self.reset()
+        return drag_end
+
+    def _cancel_click_gestures(self):
+        """Cancel click gestures when scrolling takes ownership."""
+
+        drag_end = None
+
+        if self.dragging:
+            drag_end = "DRAG_END"
+
+        self.previous_left_pinching = False
+        self.left_pinch_active = False
+        self.left_stable_count = 0
+        self.left_pinch_start_time = None
+        self.dragging = False
+
+        self.previous_right_pinching = False
+        self.right_pinch_active = False
+        self.right_stable_count = 0
+
+        self.previous_double_click_pinching = False
+        self.double_pinch_active = False
+        self.double_click_stable_count = 0
+
+        return drag_end
+
     # =========================================================
     # Reset
     # =========================================================
@@ -854,16 +1110,24 @@ class GestureDetector:
     def reset(self):
 
         self.previous_left_pinching = False
+        self.left_pinch_active = False
         self.left_stable_count = 0
         self.left_pinch_start_time = None
         self.dragging = False
+        self.last_left_click_time = 0
+
+        self.previous_action_gesture = None
+        self.action_dragging = False
 
         self.previous_right_pinching = False
+        self.right_pinch_active = False
         self.right_stable_count = 0
         self.last_right_click_time = 0
 
         self.previous_double_click_pinching = False
+        self.double_pinch_active = False
         self.double_click_stable_count = 0
+        self.last_double_click_time = 0
 
         self.previous_scroll_active = False
         self.previous_scroll_x = None

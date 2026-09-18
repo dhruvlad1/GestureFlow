@@ -8,6 +8,8 @@ thread.
 
 from PySide6.QtCore import QObject, QThread, Qt, Signal
 
+from app.state import ApplicationState, can_transition
+
 
 class CameraController(QObject):
     """
@@ -32,6 +34,8 @@ class CameraController(QObject):
 
     paused_changed = Signal(bool)
 
+    state_changed = Signal(object)
+
     stop_requested = Signal()
 
     pause_requested = Signal(bool)
@@ -54,9 +58,20 @@ class CameraController(QObject):
         # Runtime state.
         # -----------------------------------------------------
 
-        self.running = False
+        self.state = ApplicationState.INACTIVE
 
         self.paused = False
+
+    def transition_to(self, target):
+        """Apply a valid state transition and notify the UI."""
+
+        if not can_transition(self.state, target):
+            return False
+
+        self.state = target
+        self.paused = target == ApplicationState.PAUSED
+        self.state_changed.emit(target)
+        return True
 
     # =========================================================
     # Start
@@ -67,8 +82,19 @@ class CameraController(QObject):
         Start the camera worker in a dedicated Qt thread.
         """
 
-        if self.running:
-            return
+        if self.state not in (
+            ApplicationState.INACTIVE,
+            ApplicationState.ERROR,
+        ):
+            return False
+
+        if self.state == ApplicationState.ERROR and (
+            self.thread is not None or self.worker is not None
+        ):
+            return False
+
+        if not self.transition_to(ApplicationState.STARTING):
+            return False
 
         # -----------------------------------------------------
         # Import here to keep the controller lightweight during
@@ -118,7 +144,11 @@ class CameraController(QObject):
         )
 
         self.worker.error.connect(
-            self.error
+            self.on_worker_error
+        )
+
+        self.worker.ready.connect(
+            self.on_worker_ready
         )
 
         # -----------------------------------------------------
@@ -147,12 +177,10 @@ class CameraController(QObject):
         # Start the Qt thread.
         # -----------------------------------------------------
 
-        self.running = True
         self.paused = False
 
         self.thread.start()
-
-        self.started.emit()
+        return True
 
     # =========================================================
     # Stop
@@ -163,11 +191,27 @@ class CameraController(QObject):
         Request the camera worker to stop.
         """
 
-        if not self.running:
-            return
+        if self.state == ApplicationState.INACTIVE:
+            return False
+
+        if self.state == ApplicationState.ERROR:
+            if self.thread is None:
+                self.transition_to(ApplicationState.INACTIVE)
+                self.stopped.emit()
+            elif self.worker is not None:
+                self.stop_requested.emit()
+            return True
+
+        if self.state == ApplicationState.STOPPING:
+            return True
+
+        if not self.transition_to(ApplicationState.STOPPING):
+            return False
 
         if self.worker is not None:
             self.stop_requested.emit()
+
+        return True
 
         # -----------------------------------------------------
         # The worker will emit finished after cleanup.
@@ -176,12 +220,26 @@ class CameraController(QObject):
     def set_paused(self, paused):
         """Pause or resume gesture interaction without stopping capture."""
 
-        self.paused = paused
+        if paused and self.state != ApplicationState.ACTIVE:
+            return False
+
+        if not paused and self.state != ApplicationState.PAUSED:
+            return False
+
+        target = (
+            ApplicationState.PAUSED
+            if paused
+            else ApplicationState.ACTIVE
+        )
+
+        if not self.transition_to(target):
+            return False
 
         if self.worker is not None:
             self.pause_requested.emit(paused)
 
         self.paused_changed.emit(paused)
+        return True
 
     def toggle_paused(self):
         """Toggle the current gesture interaction pause state."""
@@ -192,12 +250,30 @@ class CameraController(QObject):
     # Worker completion
     # =========================================================
 
+    def on_worker_ready(self):
+        """Mark startup complete only after worker initialization."""
+
+        if self.state == ApplicationState.STARTING:
+            self.transition_to(ApplicationState.ACTIVE)
+            self.started.emit()
+
+    def on_worker_error(self, message):
+        """Expose worker errors and move the pipeline to ERROR."""
+
+        self.error.emit(message)
+
+        if self.state in (
+            ApplicationState.STARTING,
+            ApplicationState.ACTIVE,
+            ApplicationState.PAUSED,
+            ApplicationState.STOPPING,
+        ):
+            self.transition_to(ApplicationState.ERROR)
+
     def on_worker_finished(self):
         """
         Handle completion of the camera worker.
         """
-
-        self.running = False
 
         # -----------------------------------------------------
         # Stop the Qt thread event loop.
@@ -219,6 +295,9 @@ class CameraController(QObject):
 
         self.cleanup()
 
+        if self.state == ApplicationState.STOPPING:
+            self.transition_to(ApplicationState.INACTIVE)
+
         self.stopped.emit()
 
     # =========================================================
@@ -234,8 +313,6 @@ class CameraController(QObject):
 
         self.thread = None
 
-        self.running = False
-
         self.paused = False
 
     # =========================================================
@@ -247,4 +324,9 @@ class CameraController(QObject):
         Return whether camera processing is currently running.
         """
 
-        return self.running
+        return self.state in (
+            ApplicationState.STARTING,
+            ApplicationState.ACTIVE,
+            ApplicationState.PAUSED,
+            ApplicationState.STOPPING,
+        )

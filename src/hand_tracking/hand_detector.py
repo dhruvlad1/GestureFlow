@@ -18,6 +18,10 @@ class HandDetector:
     Handles MediaPipe hand landmark detection.
     """
 
+    # CameraWorker mirrors frames before detection. The returned
+    # MediaPipe label is therefore opposite the physical hand.
+    INPUT_IS_MIRRORED = True
+
     def __init__(
         self,
         max_num_hands=MAX_NUM_HANDS,
@@ -102,6 +106,60 @@ class HandDetector:
         )
 
         return results
+
+    @staticmethod
+    def get_handedness_label(results, index):
+        """Return MediaPipe's normalized label for one result hand."""
+
+        return HandDetector.get_physical_handedness_label(
+            results,
+            index,
+            input_is_mirrored=HandDetector.INPUT_IS_MIRRORED,
+        )
+
+    @staticmethod
+    def get_physical_handedness_label(
+        results,
+        index,
+        input_is_mirrored=True,
+    ):
+        """Resolve a MediaPipe label to the user's physical hand.
+
+        MediaPipe labels are relative to the detected image. When
+        processing the mirrored camera frame, physical labels must
+        be swapped back to match the user's hands.
+        """
+
+        handedness = getattr(results, "handedness", None) or []
+
+        if index >= len(handedness) or not handedness[index]:
+            return None
+
+        category = handedness[index][0]
+        for value in (
+            getattr(category, "category_name", None),
+            getattr(category, "display_name", None),
+        ):
+            if not value:
+                continue
+
+            normalized = str(value).strip().casefold()
+
+            if normalized == "left":
+                label = "Left"
+                break
+
+            if normalized == "right":
+                label = "Right"
+                break
+
+        else:
+            return None
+
+        if not input_is_mirrored:
+            return label
+
+        return "Right" if label == "Left" else "Left"
 
     def close(self):
         """
