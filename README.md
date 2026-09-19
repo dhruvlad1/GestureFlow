@@ -1,416 +1,607 @@
 # GestureFlow
 
-GestureFlow is a Python-based touchless human-computer interaction system that allows users to control the operating-system cursor using real-time hand movements captured through a webcam.
+**GestureFlow** is a Python-based touchless Human-Computer Interaction (HCI) system that uses a webcam and real-time hand tracking to control the operating-system cursor.
 
-The project uses computer vision and hand-landmark detection to translate hand coordinates into screen coordinates. It also provides a foundation for adding gesture-based interactions such as clicking, dragging, scrolling, and other touchless controls.
+Instead of using a physical mouse, the system interprets hand position captured through a camera and converts it into screen coordinates.
 
-The primary objective of GestureFlow is to create a natural, contactless interface between the user and a computer using only a standard webcam.
+The core processing pipeline is:
 
----
-
-## Table of Contents
-
-* [Overview](#overview)
-* [Problem Statement](#problem-statement)
-* [Objectives](#objectives)
-* [Key Features](#key-features)
-* [How It Works](#how-it-works)
-* [System Architecture](#system-architecture)
-* [Processing Pipeline](#processing-pipeline)
-* [Coordinate Mapping](#coordinate-mapping)
-* [Cursor Smoothing](#cursor-smoothing)
-* [Project Structure](#project-structure)
-* [Technology Stack](#technology-stack)
-* [Requirements](#requirements)
-* [Installation](#installation)
-* [Running the Project](#running-the-project)
-* [Controls](#controls)
-* [Configuration](#configuration)
-* [Core Components](#core-components)
-* [Hand Tracking](#hand-tracking)
-* [Cursor Controller](#cursor-controller)
-* [Gesture Recognition](#gesture-recognition)
-* [Camera Mirroring](#camera-mirroring)
-* [Error Handling and Troubleshooting](#error-handling-and-troubleshooting)
-* [Performance Considerations](#performance-considerations)
-* [Security and Privacy](#security-and-privacy)
-* [Future Enhancements](#future-enhancements)
-* [Use Cases](#use-cases)
-* [Limitations](#limitations)
-* [Learning Outcomes](#learning-outcomes)
-* [Project Development Roadmap](#project-development-roadmap)
-* [Contributing](#contributing)
-* [License](#license)
-
----
-
-# Overview
-
-Traditional computer interaction primarily depends on physical input devices such as a mouse, keyboard, touchscreen, or trackpad.
-
-GestureFlow explores an alternative interaction method:
-
-> Move your hand in front of a webcam and use the detected hand position to control the system cursor.
-
-The webcam continuously captures frames. Computer vision algorithms detect the user's hand and identify important landmarks such as the fingertips and joints. The detected coordinates are then transformed from camera coordinates into screen coordinates.
-
-The resulting coordinates are sent to the operating system through PyAutoGUI.
-
-### High-Level Concept
-
-```mermaid
-flowchart LR
-    A[Webcam] --> B[Video Frame]
-    B --> C[Hand Detection]
-    C --> D[Hand Landmarks]
-    D --> E[Coordinate Processing]
-    E --> F[Screen Coordinate Mapping]
-    F --> G[Smoothing]
-    G --> H[PyAutoGUI]
-    H --> I[Operating System Cursor]
+```text
+Webcam
+   ↓
+Frame Acquisition
+   ↓
+Image Preprocessing
+   ↓
+Hand Detection
+   ↓
+21 Hand Landmarks
+   ↓
+Landmark Processing
+   ↓
+Coordinate Transformation
+   ↓
+Cursor Smoothing
+   ↓
+PyAutoGUI
+   ↓
+Operating-System Cursor
 ```
 
 ---
 
-# Problem Statement
+## Features
 
-Computer interaction generally requires physical contact with an input device.
+* Real-time webcam-based hand tracking
+* Touchless cursor control
+* 21-point hand landmark detection
+* Normalized camera-to-screen coordinate transformation
+* Configurable movement margin
+* Cursor smoothing
+* Screen boundary protection
+* Camera mirroring
+* Modular hand-tracking and cursor-control architecture
+* Foundation for gesture-based interaction
 
-GestureFlow addresses the following problem:
-
-**How can a standard webcam be used to create a real-time, touchless cursor-control system without requiring specialized hardware?**
-
-The system should:
-
-1. Capture the user's hand using a webcam.
-2. Detect the hand in real time.
-3. Extract hand landmarks.
-4. Determine a suitable point for cursor control.
-5. Convert camera coordinates to screen coordinates.
-6. Move the operating-system cursor.
-7. Reduce unwanted cursor jitter.
-8. Provide a foundation for gesture-based mouse operations.
-
----
-
-# Objectives
-
-The main objectives of GestureFlow are:
-
-* Build a real-time computer-vision-based cursor controller.
-* Use a standard webcam instead of specialized hardware.
-* Detect hand landmarks using MediaPipe.
-* Translate hand movement into cursor movement.
-* Provide configurable cursor responsiveness.
-* Reduce jitter through coordinate smoothing.
-* Provide a modular Python architecture.
-* Create a foundation for additional touchless gestures.
-* Keep the system lightweight enough for real-time operation.
-
----
-
-# Key Features
-
-| Feature                     | Description                                                              |
-| --------------------------- | ------------------------------------------------------------------------ |
-| Real-Time Hand Tracking     | Detects hands continuously from webcam frames                            |
-| Hand Landmark Detection     | Extracts detailed hand landmark coordinates                              |
-| Cursor Control              | Uses hand movement to control the system cursor                          |
-| Coordinate Mapping          | Converts camera coordinates into screen coordinates                      |
-| Movement Area               | Allows exclusion of unstable camera-frame edges                          |
-| Cursor Smoothing            | Reduces unwanted cursor jitter                                           |
-| Configurable Responsiveness | Cursor sensitivity can be adjusted                                       |
-| Camera Mirroring            | Provides natural mirror-like hand interaction                            |
-| Modular Architecture        | Separates tracking and cursor-control responsibilities                   |
-| Cross-Platform Python Logic | Uses Python-based computer vision and automation libraries               |
-| Extensible Gesture System   | Architecture can be extended with click, drag, scroll and other gestures |
-| Keyboard Exit               | Allows the application to be terminated using `q`                        |
-
----
-
-# How It Works
-
-GestureFlow follows a continuous processing loop.
-
-```mermaid
-sequenceDiagram
-    participant C as Camera
-    participant O as OpenCV
-    participant H as Hand Detector
-    participant P as Cursor Controller
-    participant OS as Operating System
-
-    C->>O: Capture frame
-    O->>H: Send frame
-    H->>H: Detect hand
-    H->>H: Extract landmarks
-    H->>P: Return hand coordinates
-    P->>P: Normalize coordinates
-    P->>P: Apply movement margin
-    P->>P: Map to screen coordinates
-    P->>P: Apply smoothing
-    P->>OS: Move cursor
-    OS-->>P: Cursor updated
-    P->>O: Display processed frame
-```
-
-The loop repeats for every camera frame.
+Planned interaction includes clicking, dragging, scrolling, and custom gesture actions.
 
 ---
 
 # System Architecture
 
-GestureFlow follows a modular architecture where each major responsibility is separated into its own component.
+At a high level, GestureFlow is divided into independent processing stages.
 
 ```mermaid
-flowchart TB
-    subgraph Input
-        CAM[Webcam]
-    end
+flowchart LR
+    A[Webcam] --> B[OpenCV]
+    B --> C[Frame Preprocessing]
+    C --> D[MediaPipe]
+    D --> E[Hand Landmarks]
+    E --> F[Landmark Processing]
+    F --> G[Coordinate Mapping]
+    G --> H[Cursor Smoothing]
+    H --> I[PyAutoGUI]
+    I --> J[Operating System]
+```
 
-    subgraph Vision["Computer Vision Layer"]
-        CV[OpenCV]
-        HD[Hand Detector]
-        MP[MediaPipe]
-    end
+Each component has a specific responsibility:
 
-    subgraph Control["Control Layer"]
-        CC[Cursor Controller]
-        CM[Coordinate Mapper]
-        SM[Smoothing]
-        GR[Gesture Recognition]
-    end
+| Component          | Responsibility                                    |
+| ------------------ | ------------------------------------------------- |
+| Webcam             | Captures real-time video                          |
+| OpenCV             | Frame acquisition and image processing            |
+| MediaPipe          | Hand detection and landmark extraction            |
+| Landmark Processor | Selects and processes relevant landmarks          |
+| Coordinate Mapping | Converts camera coordinates to screen coordinates |
+| Smoothing          | Reduces cursor jitter                             |
+| PyAutoGUI          | Sends cursor movement to the operating system     |
+| Application Layer  | Coordinates the complete processing loop          |
 
-    subgraph Output
-        PA[PyAutoGUI]
-        CURSOR[System Cursor]
-    end
+This separation allows new gestures and interaction methods to be added without rewriting the entire system.
 
-    CAM --> CV
-    CV --> HD
-    HD --> MP
-    MP --> HD
-    HD --> CC
-    CC --> CM
-    CM --> SM
-    SM --> PA
-    GR --> CC
-    PA --> CURSOR
+---
+
+# How GestureFlow Works
+
+## 1. Frame Acquisition
+
+The application continuously captures frames from the webcam using OpenCV.
+
+Conceptually:
+
+```python
+ret, frame = cap.read()
+```
+
+Each frame is represented as an image matrix:
+
+```text
+Height × Width × 3
+```
+
+where the three channels represent the image color channels.
+
+The application processes these frames continuously inside a real-time loop.
+
+```text
+Webcam
+   ↓
+OpenCV VideoCapture
+   ↓
+Raw Image Frame
+   ↓
+Processing Pipeline
 ```
 
 ---
 
-# Processing Pipeline
+# 2. Image Preprocessing
 
-The complete pipeline can be represented as:
+Before hand detection, the camera frame is prepared for the hand-tracking pipeline.
 
-```mermaid
-flowchart TD
-    A[Start Application]
-    B[Initialize Webcam]
-    C[Capture Frame]
-    D[Flip / Mirror Frame]
-    E[Convert BGR to RGB]
-    F[Detect Hand]
-    G{Hand Detected?}
-    H[Extract Landmark Coordinates]
-    I[Select Control Point]
-    J[Normalize Coordinates]
-    K[Apply Camera Margin]
-    L[Map Coordinates to Screen]
-    M[Apply Cursor Smoothing]
-    N[Move Cursor]
-    O[Display Frame]
-    P{Q Pressed?}
-    Q[Release Camera]
-    R[Terminate Application]
+Typical processing includes:
 
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G -- No --> O
-    G -- Yes --> H
-    H --> I
-    I --> J
-    J --> K
-    K --> L
-    L --> M
-    M --> N
-    N --> O
-    O --> P
-    P -- No --> C
-    P -- Yes --> Q
-    Q --> R
+```text
+Raw BGR Frame
+      ↓
+Color Conversion
+      ↓
+RGB Frame
+      ↓
+Optional Horizontal Flip
+      ↓
+MediaPipe Input
 ```
+
+OpenCV commonly represents images in **BGR** format, while the hand-tracking pipeline expects RGB input.
+
+The conversion can be represented as:
+
+```python
+rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+```
+
+The frame can also be horizontally flipped to provide a more natural mirror-like interaction.
 
 ---
 
-# Coordinate Mapping
+# 3. Hand Detection
 
-One of the most important parts of GestureFlow is converting the position of the hand from the webcam coordinate system into the computer's screen coordinate system.
+GestureFlow uses **MediaPipe** to detect the hand in each frame.
 
-A webcam frame might have dimensions such as:
-
-```text
-Camera:
-Width  = 1280
-Height = 720
-```
-
-while the monitor might have:
+The important distinction is that the system does not simply detect:
 
 ```text
-Screen:
-Width  = 1920
-Height = 1080
+"Hand found"
 ```
 
-Therefore, camera coordinates cannot simply be used directly as cursor coordinates.
-
-## Camera Coordinate System
-
-The camera provides coordinates approximately in the following range:
+Instead, it produces a structured representation of the hand using **21 landmarks**.
 
 ```text
-x = 0       ----------------------> camera width
-y = 0
-|
-|
-|
-v
-camera height
+MediaPipe
+     ↓
+Hand Detection
+     ↓
+21 Landmark Points
+     ↓
+(x, y, z) for each landmark
 ```
 
-MediaPipe landmarks use normalized coordinates:
-
-```text
-x ∈ [0, 1]
-y ∈ [0, 1]
-```
-
-where:
-
-* `0, 0` represents the top-left.
-* `1, 1` represents the bottom-right.
+This landmark representation becomes the primary input for the rest of the interaction system.
 
 ---
 
-# Movement Margin
+# 4. Hand Landmark Model
 
-The entire camera frame is not necessarily ideal for cursor control.
+Each detected hand contains 21 landmarks corresponding to anatomical points such as:
 
-The outer edges can produce uncomfortable or unstable cursor movement.
+* Wrist
+* Thumb joints and tip
+* Index finger joints and tip
+* Middle finger joints and tip
+* Ring finger joints and tip
+* Little finger joints and tip
 
-GestureFlow therefore supports a configurable `margin`.
-
-For example:
-
-```text
-             Camera Frame
-
-        +-----------------------+
-        |       margin          |
-        |   +---------------+   |
-        |   |               |   |
-        | m |   CONTROL     | m |
-        |   |    AREA       |   |
-        |   |               |   |
-        |   +---------------+   |
-        |       margin          |
-        +-----------------------+
-```
-
-The usable region is mapped to the entire screen.
-
-This means a relatively small hand movement inside the active camera region can cover the full screen.
-
----
-
-# Coordinate Transformation
-
-If:
+Each landmark contains normalized coordinates:
 
 ```text
-x = detected hand x-coordinate
-y = detected hand y-coordinate
-
-margin = excluded percentage
+landmark.x
+landmark.y
+landmark.z
 ```
 
-the effective movement region is approximately:
+The primary coordinates used for cursor control are:
 
 ```text
-x ∈ [margin, 1 - margin]
-y ∈ [margin, 1 - margin]
+x → horizontal position
+y → vertical position
+z → relative depth
 ```
 
-The coordinate is then clamped to the active region and mapped to screen coordinates.
+The `x` and `y` coordinates are normalized approximately to:
+
+```text
+0 ≤ x ≤ 1
+0 ≤ y ≤ 1
+```
 
 Conceptually:
 
 ```text
-Camera Coordinate
-        |
-        v
-Normalize
-        |
-        v
-Clamp to Movement Area
-        |
-        v
-Scale to Screen Resolution
-        |
-        v
-Screen Coordinate
+(0,0)
+  ┌──────────────────────────────→ X
+  │
+  │
+  │       Hand
+  │        ●
+  │       / \
+  │      /   \
+  │
+  ↓
+  Y
 ```
 
-This allows the system to work independently of the webcam and monitor resolutions.
+This normalized coordinate system allows the hand-tracking model to remain independent of the camera's actual resolution.
 
 ---
 
-# Cursor Smoothing
+# 5. Selecting the Control Landmark
 
-Raw hand tracking can produce small variations between frames.
+The entire hand does not need to control the cursor.
+
+GestureFlow can select a specific landmark as the control point, such as the **index-finger tip**.
+
+```text
+21 Hand Landmarks
+       ↓
+Select Control Landmark
+       ↓
+Index Finger Tip
+       ↓
+(x, y)
+       ↓
+Cursor Position
+```
+
+This separation is important because the same 21-landmark representation can later be reused for gesture recognition.
 
 For example:
 
 ```text
-Frame 1: x = 0.501
-Frame 2: x = 0.497
-Frame 3: x = 0.504
-Frame 4: x = 0.499
+Landmarks
+    ├── Index Tip → Cursor Movement
+    ├── Thumb + Index → Click
+    ├── Multiple Fingers → Scroll
+    └── Full Hand → Gesture Classification
 ```
-
-Even though the user's hand may appear stationary, these small variations can cause cursor jitter.
-
-GestureFlow therefore provides cursor smoothing.
-
-A simple smoothing model can be represented as:
-
-```text
-smoothed_position =
-    previous_position × (1 - smoothing_factor)
-    + current_position × smoothing_factor
-```
-
-A higher responsiveness value causes the cursor to follow the hand more directly.
-
-A lower responsiveness value produces smoother but potentially slower cursor movement.
 
 ---
 
-# Project Structure
+# 6. Camera-to-Screen Coordinate Transformation
 
-The project is organized to separate computer vision, hand tracking, cursor control, and application logic.
+MediaPipe produces normalized coordinates, while the operating system expects actual screen coordinates.
+
+For example:
+
+```text
+MediaPipe:
+
+x = 0.65
+y = 0.42
+```
+
+These values must be transformed into screen coordinates.
+
+If the screen resolution is:
+
+```text
+1920 × 1080
+```
+
+the normalized position can conceptually be mapped as:
+
+$$
+x_s = x \times W_s
+$$
+
+$$
+y_s = y \times H_s
+$$
+
+where:
+
+* \(x,y\) = normalized landmark coordinates
+* \(W_s\) = screen width
+* \(H_s\) = screen height
+* \(x_s,y_s\) = screen coordinates
+
+However, GestureFlow uses an active movement region rather than mapping the entire camera frame directly to the screen.
+
+---
+
+# 7. Movement Margin
+
+The edges of the camera frame can be difficult to control accurately.
+
+GestureFlow therefore defines a configurable **movement margin**.
+
+```text
+Camera Frame
+
+┌─────────────────────────────────┐
+│          Top Margin             │
+│   ┌─────────────────────────┐   │
+│   │                         │   │
+│ L │     ACTIVE REGION       │ R │
+│   │                         │   │
+│   └─────────────────────────┘   │
+│         Bottom Margin            │
+└─────────────────────────────────┘
+```
+
+If the margin is:
+
+```python
+margin = 0.1
+```
+
+approximately 10% of the camera region is excluded from direct cursor mapping.
+
+The remaining region becomes the effective control space.
+
+This provides:
+
+* Better edge control
+* Reduced accidental screen-edge movement
+* More predictable coordinate mapping
+* A more comfortable interaction area
+
+---
+
+# 8. Coordinate Clamping
+
+The detected hand can move outside the intended active region.
+
+Before converting coordinates to screen coordinates, they are constrained to the valid movement range.
+
+Conceptually:
+
+```text
+Detected Coordinate
+        ↓
+Check Active Region
+        ↓
+Clamp to Valid Range
+        ↓
+Normalize
+        ↓
+Screen Coordinate
+```
+
+This prevents invalid or excessive cursor coordinates.
+
+The transformation can be represented conceptually as:
+
+$$
+x' =
+\frac{x-x_{min}}
+{x_{max}-x_{min}}
+$$
+
+$$
+y' =
+\frac{y-y_{min}}
+{y_{max}-y_{min}}
+$$
+
+followed by:
+
+$$
+x_s = x'W_s
+$$
+
+$$
+y_s = y'H_s
+$$
+
+The resulting coordinates are then constrained to the usable screen range.
+
+---
+
+# 9. Screen Padding
+
+GestureFlow can additionally apply screen padding.
+
+```python
+screen_padding = 5
+```
+
+The purpose is to prevent the cursor from being pushed directly against the extreme screen boundary.
+
+Conceptually:
+
+```text
+Screen
+
+┌──────────────────────────────┐
+│ Padding                      │
+│   ┌──────────────────────┐   │
+│   │                      │   │
+│   │   Usable Cursor      │   │
+│   │       Region         │   │
+│   │                      │   │
+│   └──────────────────────┘   │
+│                      Padding │
+└──────────────────────────────┘
+```
+
+This provides additional protection against edge-related cursor behavior.
+
+---
+
+# 10. Cursor Smoothing
+
+Raw landmark coordinates can fluctuate between frames.
+
+For example, even if the hand is almost stationary:
+
+```text
+Frame 1 → 500
+Frame 2 → 503
+Frame 3 → 498
+Frame 4 → 505
+Frame 5 → 501
+```
+
+These small variations can produce visible cursor jitter.
+
+GestureFlow therefore applies smoothing before sending the position to the operating system.
+
+Conceptually:
+
+```text
+Raw Landmark Position
+        ↓
+Coordinate Mapping
+        ↓
+Noise / Small Variations
+        ↓
+Smoothing
+        ↓
+Stable Cursor Position
+```
+
+A common interpolation model is:
+
+$$
+C_t = C_{t-1} + \alpha(P_t-C_{t-1})
+$$
+
+where:
+
+* \(P_t\) = current detected position
+* \(C_t\) = smoothed cursor position
+* \(C_{t-1}\) = previous cursor position
+* \(\alpha\) = responsiveness factor
+
+A larger responsiveness value follows the hand more aggressively, while stronger smoothing produces more stable but potentially less responsive movement.
+
+GestureFlow exposes smoothing as a configurable parameter.
+
+```python
+CursorController(
+    smoothing=1,
+    margin=0.1,
+    screen_padding=5,
+)
+```
+
+---
+
+# 11. Complete Low-Level Data Flow
+
+The complete frame-processing pipeline can be represented as:
+
+```text
+                    CAMERA
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ OpenCV Capture   │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ BGR → RGB        │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ MediaPipe        │
+              │ Hand Detection   │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ 21 Landmarks    │
+              │ (x, y, z)       │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ Landmark        │
+              │ Selection       │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ Active Region   │
+              │ + Clamping      │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ Camera → Screen │
+              │ Transformation  │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ Cursor          │
+              │ Smoothing       │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ PyAutoGUI       │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ OS Cursor       │
+              └─────────────────┘
+```
+
+This entire pipeline executes repeatedly for every camera frame.
+
+---
+
+# 12. Real-Time Processing Loop
+
+At the application level, GestureFlow follows a continuous processing loop:
+
+```text
+while application is running:
+
+    capture frame
+
+    preprocess frame
+
+    detect hand
+
+    extract landmarks
+
+    select control landmark
+
+    calculate camera coordinates
+
+    apply movement margin
+
+    clamp coordinates
+
+    transform to screen coordinates
+
+    smooth cursor position
+
+    move system cursor
+
+    render debug information
+```
+
+The key characteristic is that this process happens continuously rather than processing a prerecorded image.
+
+The quality of the interaction therefore depends on:
+
+```text
+Camera FPS
+      +
+Hand Detection Latency
+      +
+Coordinate Processing
+      +
+Cursor Update Latency
+```
+
+---
+
+# 13. Software Architecture
+
+GestureFlow follows a modular structure so that computer vision and cursor-control logic remain separated.
 
 ```text
 GestureFlow/
 │
 ├── src/
-│   │
 │   ├── hand_tracking/
 │   │   ├── __init__.py
 │   │   └── hand_detector.py
@@ -422,115 +613,333 @@ GestureFlow/
 │   └── main.py
 │
 ├── tests/
-│   └── ...
-│
 ├── requirements.txt
 ├── README.md
 └── .gitignore
 ```
 
-The exact structure can evolve as additional gesture modules are implemented.
+### `main.py`
 
----
-
-# Technology Stack
-
-| Technology  | Purpose                                        |
-| ----------- | ---------------------------------------------- |
-| Python 3.11 | Main programming language                      |
-| OpenCV      | Webcam access and image processing             |
-| MediaPipe   | Hand detection and landmark tracking           |
-| PyAutoGUI   | Operating-system mouse control                 |
-| NumPy       | Numerical operations and coordinate processing |
-| Git         | Version control                                |
-| GitHub      | Source-code hosting                            |
-
----
-
-# Requirements
-
-## Hardware
-
-Minimum recommended hardware:
-
-| Component | Requirement                                    |
-| --------- | ---------------------------------------------- |
-| Webcam    | Any webcam capable of continuous video capture |
-| Processor | Modern dual-core or better                     |
-| RAM       | 4 GB minimum                                   |
-| Display   | Standard monitor                               |
-| Lighting  | Reasonably well-lit environment                |
-
-A dedicated GPU is not required for the basic system.
-
----
-
-# Software Requirements
-
-The project currently uses Python 3.11.
-
-The development environment has been tested with:
+Responsible for application orchestration:
 
 ```text
-Python 3.11.x
-OpenCV
-MediaPipe
-PyAutoGUI
-NumPy
+Camera
+   ↓
+Frame Loop
+   ↓
+Hand Detector
+   ↓
+Cursor Controller
+   ↓
+Output
 ```
 
-Using a virtual environment is recommended.
+### `hand_detector.py`
+
+Responsible for:
+
+* MediaPipe initialization
+* Hand detection
+* Landmark extraction
+* Detection results
+
+The detector abstracts MediaPipe away from the rest of the application.
+
+### `cursor_controller.py`
+
+Responsible for:
+
+* Coordinate mapping
+* Movement margin
+* Clamping
+* Screen padding
+* Cursor smoothing
+* Cursor movement
+
+This prevents OS-level cursor logic from being tightly coupled with hand detection.
 
 ---
 
-# Installation
+# 14. Gesture Recognition Architecture
 
-## 1. Clone the Repository
+The current system primarily uses hand position for cursor movement.
+
+The same landmark data can support a complete gesture engine.
+
+```mermaid
+flowchart TD
+    A[21 Hand Landmarks] --> B[Feature Extraction]
+    B --> C[Geometric Analysis]
+    C --> D[Gesture Classification]
+
+    D --> E[Cursor Movement]
+    D --> F[Left Click]
+    D --> G[Right Click]
+    D --> H[Drag]
+    D --> I[Scroll]
+    D --> J[Custom Action]
+```
+
+For example, a pinch gesture can be detected using the distance between two landmarks.
+
+For two points:
+
+$$
+d = \sqrt{(x_2-x_1)^2+(y_2-y_1)^2}
+$$
+
+Conceptually:
+
+```text
+Thumb Tip
+    ●
+     \
+      \  distance
+       \
+        ●
+     Index Tip
+
+distance < threshold
+        ↓
+     PINCH
+        ↓
+    Mouse Click
+```
+
+This makes the landmark representation reusable across multiple interaction modes.
+
+---
+
+# 15. Planned Gesture System
+
+| Gesture                                | Potential Action      |
+| -------------------------------------- | --------------------- |
+| Index finger movement                  | Cursor movement       |
+| Thumb + index pinch                    | Left click            |
+| Alternative pinch/finger configuration | Right click           |
+| Pinch and hold                         | Drag                  |
+| Two-finger movement                    | Scroll                |
+| Open palm                              | Pause tracking        |
+| Swipe                                  | Custom action         |
+| Custom gesture                         | User-defined shortcut |
+
+The gesture engine can eventually be separated from the cursor controller:
+
+```text
+Hand Detector
+      ↓
+Landmarks
+      ↓
+Gesture Engine
+      ↓
+Action Dispatcher
+      ↓
+OS Interaction
+```
+
+This allows gestures to trigger actions beyond cursor movement.
+
+---
+
+# 16. Design Decisions
+
+## Why MediaPipe?
+
+MediaPipe provides real-time hand landmark detection without requiring a custom hand-detection model to be trained from scratch.
+
+The application receives structured landmark data that can directly be used for geometric processing and gesture recognition.
+
+---
+
+## Why OpenCV?
+
+OpenCV provides the camera and image-processing layer.
+
+It handles:
+
+* Webcam capture
+* Frame manipulation
+* Color conversion
+* Image display
+* Real-time video processing
+
+---
+
+## Why PyAutoGUI?
+
+PyAutoGUI provides the bridge between the vision system and the operating system.
+
+The architecture becomes:
+
+```text
+Hand Movement
+     ↓
+Vision Processing
+     ↓
+Screen Coordinates
+     ↓
+PyAutoGUI
+     ↓
+OS Cursor
+```
+
+This keeps OS interaction separate from the computer-vision pipeline.
+
+---
+
+## Why a Modular Architecture?
+
+Hand tracking and cursor control are independent concerns.
+
+For example, a future gesture system can consume the same landmarks:
+
+```text
+                    ┌── Cursor Controller
+                    │
+21 Landmarks ───────┼── Gesture Engine
+                    │
+                    ├── Click Controller
+                    │
+                    └── Scroll Controller
+```
+
+This allows new interaction methods to be added without modifying the underlying hand detector.
+
+---
+
+# 17. Performance Considerations
+
+GestureFlow is a real-time application, so performance is affected by several stages:
+
+```text
+Camera Capture
+      ↓
+Image Processing
+      ↓
+MediaPipe Inference
+      ↓
+Landmark Processing
+      ↓
+Coordinate Transformation
+      ↓
+Cursor Update
+```
+
+Important performance factors include:
+
+* Camera resolution
+* Camera frame rate
+* MediaPipe inference time
+* CPU utilization
+* Number of processing operations per frame
+* Cursor update frequency
+
+Performance can eventually be measured using:
+
+| Metric             | Description                                     |
+| ------------------ | ----------------------------------------------- |
+| FPS                | Frames processed per second                     |
+| Inference Time     | Time spent detecting the hand                   |
+| Processing Time    | Time spent processing one frame                 |
+| End-to-End Latency | Delay between hand movement and cursor response |
+| CPU Usage          | Processor utilization during execution          |
+
+Measured benchmark values should be added once the implementation is optimized and tested.
+
+---
+
+# 18. Edge Cases
+
+A real-time vision system must handle situations where the expected input is unavailable or unreliable.
+
+### No Hand Detected
+
+```text
+No hand
+   ↓
+No landmark position
+   ↓
+Do not update cursor
+```
+
+### Hand Leaves Active Region
+
+```text
+Landmark
+   ↓
+Outside active region
+   ↓
+Clamp coordinate
+   ↓
+Safe screen position
+```
+
+### Detection Noise
+
+```text
+Unstable landmark
+      ↓
+Coordinate fluctuation
+      ↓
+Smoothing
+      ↓
+Reduced cursor jitter
+```
+
+### Camera Failure
+
+```text
+Camera unavailable
+       ↓
+Capture failure
+       ↓
+Terminate / report error
+```
+
+These cases prevent unreliable tracking from directly producing unexpected cursor behavior.
+
+---
+
+# 19. Technology Stack
+
+| Technology  | Purpose                                |
+| ----------- | -------------------------------------- |
+| Python 3.11 | Application development                |
+| OpenCV      | Camera and image processing            |
+| MediaPipe   | Hand detection and landmark extraction |
+| NumPy       | Numerical operations                   |
+| PyAutoGUI   | OS cursor interaction                  |
+
+---
+
+# 20. Installation
+
+### Clone the repository
 
 ```bash
 git clone https://github.com/<your-username>/GestureFlow.git
 cd GestureFlow
 ```
 
-Replace `<your-username>` with the GitHub account containing the repository.
-
----
-
-## 2. Create a Virtual Environment
-
-On Windows:
+### Create the virtual environment
 
 ```powershell
 py -3.11 -m venv venv
 ```
 
----
-
-## 3. Activate the Virtual Environment
-
-PowerShell:
+### Activate it
 
 ```powershell
 .\venv\Scripts\Activate.ps1
 ```
 
-If activation is successful, the terminal should show:
-
-```text
-(venv)
-```
-
-before the current directory.
-
----
-
-## 4. Install Dependencies
+### Install dependencies
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-If a requirements file has not yet been created:
+If `requirements.txt` is not available:
 
 ```powershell
 pip install opencv-python mediapipe pyautogui numpy
@@ -538,1158 +947,191 @@ pip install opencv-python mediapipe pyautogui numpy
 
 ---
 
-# Running the Project
-
-Activate the virtual environment first:
-
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-Then run the main application:
+# 21. Running the Project
 
 ```powershell
 python src/main.py
 ```
 
-The application should initialize the webcam and begin detecting the user's hand.
+The webcam will open and the hand-tracking pipeline will begin.
 
-The terminal should display a startup message similar to:
-
-```text
-GestureFlow started. Press 'q' to quit.
-```
-
----
-
-# Controls
-
-| Input         | Action                   |
-| ------------- | ------------------------ |
-| Hand movement | Controls cursor position |
-| `q`           | Exit the application     |
-
-Additional controls can be introduced as gesture recognition is expanded.
-
----
-
-# Configuration
-
-The cursor controller exposes configurable parameters.
-
-Example:
-
-```python
-CursorController(
-    smoothing=1,
-    margin=0.1,
-    screen_padding=5,
-)
-```
-
-## Parameters
-
-| Parameter        | Purpose                                                                           |
-| ---------------- | --------------------------------------------------------------------------------- |
-| `smoothing`      | Controls how closely the cursor follows the detected hand                         |
-| `margin`         | Defines the percentage of the camera frame excluded from cursor movement          |
-| `screen_padding` | Prevents the cursor from being positioned directly at the extreme screen boundary |
-
----
-
-## Smoothing
-
-Example:
-
-```python
-smoothing=1
-```
-
-A value of `1` provides maximum responsiveness with minimal smoothing.
-
-Lower values can be used when more stability is desired.
-
-Conceptually:
+Press:
 
 ```text
-Higher smoothing / responsiveness
-        |
-        +---- Faster cursor response
-        +---- Less lag
-        +---- Potentially more jitter
-
-Lower smoothing / responsiveness
-        |
-        +---- More stable movement
-        +---- More filtering
-        +---- Potentially more cursor lag
+q
 ```
 
----
-
-## Margin
-
-Example:
-
-```python
-margin=0.1
-```
-
-means approximately 10% of the camera frame is excluded around the movement area.
-
-This creates a more comfortable control region.
+to exit.
 
 ---
 
-## Screen Padding
+# 22. Requirements
 
-Example:
+### Hardware
 
-```python
-screen_padding=5
-```
+* Webcam
+* Modern CPU
+* 4 GB+ RAM recommended
+* Reasonably well-lit environment
 
-This prevents the cursor from being positioned exactly at the extreme screen boundary.
+### Software
 
----
+* Python 3.11
+* Windows, Linux, or macOS
+* Webcam access permissions
 
-# Core Components
-
-GestureFlow is divided into several logical components.
-
-## 1. Camera Module
-
-Responsible for:
-
-* Opening the webcam.
-* Reading frames.
-* Handling frame capture.
-* Providing frames to the computer-vision pipeline.
-* Releasing the camera when the application exits.
+A dedicated GPU is not required for the basic implementation.
 
 ---
 
-## 2. Hand Detector
+# 23. Limitations
 
-The hand detector is responsible for:
+Current performance can be affected by:
 
-* Receiving camera frames.
-* Processing the image.
-* Detecting hands.
-* Extracting hand landmarks.
-* Returning landmark coordinates.
+* Poor lighting
+* Hand occlusion
+* Background clutter
+* Low-quality webcams
+* Motion blur
+* Extreme hand angles
+* Landmark detection noise
+* High camera resolution increasing processing cost
 
-MediaPipe provides a standardized representation of the hand.
-
-A detected hand contains landmarks representing points such as:
-
-```text
-                 8
-                 |
-                 |
-            7 ---6
-                 |
-                 |
-     4           5
-     |           |
-     3           |
-     |           |
-     2           |
-     |           |
-     1-----------0
-```
-
-The complete MediaPipe hand model contains 21 landmarks.
+Cursor control can also become less precise when the hand moves very quickly or becomes partially hidden from the camera.
 
 ---
 
-# Hand Landmark Model
+# 24. Future Architecture
 
-MediaPipe identifies 21 hand landmarks.
-
-The major landmark groups are:
-
-| Finger / Region | Landmarks |
-| --------------- | --------- |
-| Wrist           | 0         |
-| Thumb           | 1–4       |
-| Index Finger    | 5–8       |
-| Middle Finger   | 9–12      |
-| Ring Finger     | 13–16     |
-| Little Finger   | 17–20     |
-
-For cursor movement, a fingertip or another stable landmark can be selected as the control point.
-
-For example:
-
-```text
-Index fingertip
-      |
-      v
-Landmark 8
-      |
-      v
-Normalized coordinates
-      |
-      v
-Screen coordinates
-      |
-      v
-Cursor position
-```
-
----
-
-# Cursor Controller
-
-The `CursorController` is responsible for translating detected hand coordinates into operating-system cursor movement.
-
-Its responsibilities include:
-
-1. Receiving the selected landmark.
-2. Normalizing the coordinates.
-3. Applying the configured movement margin.
-4. Mapping coordinates to screen dimensions.
-5. Applying screen padding.
-6. Applying smoothing.
-7. Sending the resulting position to PyAutoGUI.
-
-Conceptual flow:
-
-```mermaid
-flowchart LR
-    A[Hand Landmark] --> B[Normalized X/Y]
-    B --> C[Apply Margin]
-    C --> D[Clamp Coordinates]
-    D --> E[Map to Screen]
-    E --> F[Apply Padding]
-    F --> G[Smoothing]
-    G --> H[PyAutoGUI Move]
-```
-
----
-
-# Gesture Recognition
-
-Gesture recognition is the natural next layer above hand tracking.
-
-Instead of using only the hand position, GestureFlow can analyze the relative positions of multiple landmarks.
-
-For example:
-
-```text
-Index finger extended
-Middle finger folded
-Ring finger folded
-Little finger folded
-```
-
-can represent one gesture.
-
-Possible gesture mappings include:
-
-| Gesture                       | Possible Action                  |
-| ----------------------------- | -------------------------------- |
-| Index finger movement         | Cursor movement                  |
-| Index + thumb pinch           | Left click                       |
-| Two-finger gesture            | Right click                      |
-| Pinch and hold                | Drag                             |
-| Two fingers moving vertically | Scroll                           |
-| Open palm                     | Pause/disable cursor             |
-| Closed fist                   | Interaction mode toggle          |
-| Swipe                         | Navigation / application control |
-
-These gestures can be implemented as additional modules without changing the fundamental hand-tracking pipeline.
-
----
-
-# Gesture Recognition Architecture
-
-A scalable gesture system can follow this structure:
+GestureFlow can evolve from a cursor controller into a complete touchless interaction framework.
 
 ```mermaid
 flowchart TD
-    A[Hand Landmarks]
-    B[Feature Extraction]
-    C[Finger State Detection]
-    D[Distance / Angle Calculation]
-    E[Gesture Classifier]
-    F{Gesture}
+    A[Webcam] --> B[Frame Processing]
+    B --> C[Hand Tracking]
+    C --> D[Landmark Processing]
+    D --> E[Gesture Engine]
 
-    A --> B
-    B --> C
-    B --> D
-    C --> E
-    D --> E
-    E --> F
+    E --> F[Cursor Control]
+    E --> G[Mouse Actions]
+    E --> H[Scroll Control]
+    E --> I[Drag and Drop]
+    E --> J[Keyboard Shortcuts]
+    E --> K[Application Commands]
 
-    F --> G[Move]
-    F --> H[Left Click]
-    F --> I[Right Click]
-    F --> J[Drag]
-    F --> K[Scroll]
-    F --> L[Other Action]
+    F --> L[Operating System]
+    G --> L
+    H --> L
+    I --> L
+    J --> L
+    K --> L
 ```
 
----
+Potential future improvements include:
 
-# Camera Mirroring
-
-A webcam normally produces an image that may not behave like a mirror.
-
-For a natural touchless interface, the camera frame can be horizontally flipped.
-
-Conceptually:
-
-```text
-Without Mirroring
-
-User moves hand left
-        |
-        v
-Screen interaction appears reversed
-
-
-With Mirroring
-
-User moves hand left
-        |
-        v
-Cursor moves left
-```
-
-This creates a more intuitive interaction model.
-
-OpenCV can perform the horizontal flip using:
-
-```python
-frame = cv2.flip(frame, 1)
-```
+* Left/right clicking
+* Drag and drop
+* Scrolling
+* Gesture customization
+* Automatic calibration
+* Adaptive smoothing
+* Gesture confidence thresholds
+* Multi-hand interaction
+* User-defined shortcuts
+* Application-specific gesture profiles
+* Performance monitoring
+* Gesture recording and replay
+* ML-based gesture classification
 
 ---
 
-# Computer Vision Pipeline
+# 25. Privacy
 
-OpenCV and MediaPipe operate together in the following manner:
+GestureFlow is designed around local processing.
 
-```mermaid
-flowchart LR
-    A[Webcam Frame] --> B[OpenCV]
-    B --> C[BGR Image]
-    C --> D[RGB Conversion]
-    D --> E[MediaPipe]
-    E --> F[21 Hand Landmarks]
-    F --> G[Application Logic]
-```
-
-OpenCV handles image acquisition and display while MediaPipe performs the hand-landmark detection.
-
----
-
-# Real-Time Processing
-
-GestureFlow operates on a frame-by-frame basis.
-
-For every frame:
-
-```text
-Capture
-  ↓
-Preprocess
-  ↓
-Detect
-  ↓
-Extract
-  ↓
-Transform
-  ↓
-Control
-  ↓
-Display
-  ↓
-Repeat
-```
-
-The system therefore does not require a pre-recorded video or image.
-
----
-
-# Error Handling and Troubleshooting
-
-## MediaPipe `solutions` Attribute Error
-
-An error such as:
-
-```text
-AttributeError:
-module 'mediapipe' has no attribute 'solutions'
-```
-
-can indicate an installation or package-resolution issue.
-
-Verify the installed version:
-
-```powershell
-python -c "import mediapipe as mp; print(mp.__version__)"
-```
-
-Also verify that the expected API exists:
-
-```powershell
-python -c "import mediapipe as mp; print(hasattr(mp, 'solutions'))"
-```
-
-The expected result for the project environment is:
-
-```text
-True
-```
-
----
-
-## `Input timestamp must be monotonically increasing`
-
-MediaPipe may report:
-
-```text
-ValueError:
-Input timestamp must be monotonically increasing.
-```
-
-This occurs when frames supplied to a MediaPipe processing pipeline do not have timestamps that increase correctly.
-
-For a real-time webcam application, frames should be processed in chronological order.
-
-If this error appears, check:
-
-* Frame-processing order.
-* Timestamp generation.
-* Reuse of timestamps.
-* Multiple processing pipelines receiving inconsistent timestamps.
-* Whether the detector is being initialized repeatedly inside the frame loop.
-
-The detector should generally be initialized once and reused.
-
----
-
-## `NORM_RECT without IMAGE_DIMENSIONS` Warning
-
-A warning such as:
-
-```text
-Using NORM_RECT without IMAGE_DIMENSIONS is only supported
-for the square ROI.
-Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
-```
-
-is generated by MediaPipe's internal processing graph.
-
-It is generally a warning rather than a Python exception.
-
-It indicates that a normalized rectangular region is being processed without explicit image dimensions.
-
-If the application continues to operate correctly, the warning does not necessarily indicate a functional failure.
-
----
-
-## Webcam Not Opening
-
-If the webcam does not initialize:
-
-1. Check whether another application is using the camera.
-2. Verify Windows camera permissions.
-3. Try another camera index.
-
-For example:
-
-```python
-cap = cv2.VideoCapture(0)
-```
-
-can be changed to:
-
-```python
-cap = cv2.VideoCapture(1)
-```
-
-if another camera is available.
-
----
-
-## Cursor Is Too Jittery
-
-Possible solutions:
-
-* Reduce cursor responsiveness.
-* Increase smoothing.
-* Improve lighting.
-* Keep the hand within the camera's field of view.
-* Avoid excessive background movement.
-* Adjust the movement margin.
-
----
-
-## Cursor Is Too Slow
-
-Possible solutions:
-
-* Increase responsiveness.
-* Reduce smoothing.
-* Increase the usable movement region.
-* Reduce unnecessary coordinate filtering.
-
----
-
-## Hand Is Not Detected Reliably
-
-Possible causes:
-
-* Poor lighting.
-* Hand partially outside the camera frame.
-* Excessive motion blur.
-* Background clutter.
-* Hand too far from the camera.
-* Hand orientation difficult for the detector.
-
-Recommended setup:
-
-```text
-             Webcam
-               |
-               v
-
-          +---------+
-          |         |
-          |  Hand   |
-          |         |
-          +---------+
-
-     Good lighting
-     Clear background
-     Stable distance
-```
-
----
-
-# Performance Considerations
-
-Real-time computer vision requires processing every camera frame quickly enough to maintain responsive interaction.
-
-The approximate relationship is:
-
-```text
-Higher FPS
-   ↓
-More frequent tracking updates
-   ↓
-More responsive cursor
-
-Lower FPS
-   ↓
-Fewer updates
-   ↓
-Potentially noticeable cursor latency
-```
-
-Performance depends on:
-
-* CPU performance.
-* Camera resolution.
-* Camera frame rate.
-* MediaPipe processing complexity.
-* Number of hands being tracked.
-* Additional gesture calculations.
-* Background applications.
-
-A balance between resolution and processing speed should be maintained.
-
----
-
-# Recommended Camera Configuration
-
-For a typical webcam:
-
-```text
-Resolution: 640 × 480
-FPS:        30
-```
-
-can provide a reasonable starting point for real-time processing.
-
-Higher resolutions may improve landmark precision in some situations but increase processing requirements.
-
----
-
-# Security and Privacy
-
-GestureFlow processes webcam input locally as part of the application.
-
-The webcam is used to detect hand movement and landmarks for interaction.
-
-The project does not require uploading camera frames to a remote server for the core cursor-control functionality.
-
-Because webcam applications process potentially sensitive visual information, users should:
-
-* Run the application only from trusted source code.
-* Verify camera permissions.
-* Avoid running unknown modified versions of the application.
-* Close the application when it is not needed.
-
----
-
-# Use Cases
-
-GestureFlow can be used for:
-
-### Touchless Computer Interaction
-
-Control the mouse without physically touching a mouse.
-
-### Presentation Control
-
-Use gestures to navigate presentation slides.
-
-### Accessibility
-
-Provide an alternative interaction method for users who cannot comfortably operate a conventional mouse.
-
-### Smart Displays
-
-Control screens or kiosks without physical contact.
-
-### Media Control
-
-Use gestures for play, pause, volume, and navigation.
-
-### Human-Computer Interaction Research
-
-Serve as a platform for experimenting with gesture-based interfaces.
-
-### Computer Vision Learning
-
-Demonstrate how computer vision can be connected to operating-system automation.
-
----
-
-# Limitations
-
-The current approach has several limitations.
-
-## Lighting Dependency
-
-Hand detection can become less reliable in poor lighting.
-
-## Occlusion
-
-If parts of the hand are hidden, landmark detection may become less accurate.
-
-## Background Interference
-
-Complex backgrounds can make visual tracking more difficult.
-
-## Cursor Precision
-
-Human hand movement naturally contains small variations, making precise pixel-level cursor control difficult without filtering.
-
-## Camera Dependency
-
-The quality and frame rate of the webcam affect the overall experience.
-
-## Fatigue
-
-Holding a hand in front of a camera for extended periods may be less comfortable than using a physical mouse.
-
-## Gesture Ambiguity
-
-Some gestures can produce similar landmark configurations and require carefully designed classification rules.
-
----
-
-# Future Enhancements
-
-GestureFlow can be extended considerably beyond basic cursor movement.
-
-## 1. Click Detection
-
-Implement pinch-based clicking.
-
-```text
-Thumb tip
-    \
-     \  small distance
-      \
-    Index tip
-
-       ↓
-
-   LEFT CLICK
-```
-
----
-
-## 2. Right Click
-
-Use a different finger configuration to trigger a right click.
-
----
-
-## 3. Drag and Drop
-
-Use a pinch-and-hold gesture:
-
-```text
-Pinch
-  ↓
-Mouse Down
-  ↓
-Move Hand
-  ↓
-Mouse Movement
-  ↓
-Release Pinch
-  ↓
-Mouse Up
-```
-
----
-
-## 4. Scrolling
-
-Use two fingers or a dedicated gesture to control vertical scrolling.
-
-```text
-Hand moves up
-      ↓
-Scroll up
-
-Hand moves down
-      ↓
-Scroll down
-```
-
----
-
-## 5. Gesture-Based Application Control
-
-Add gestures for:
-
-* Play / pause.
-* Volume control.
-* Window switching.
-* Application launching.
-* Browser navigation.
-* Presentation navigation.
-
----
-
-## 6. Gesture Customization
-
-Allow users to configure gestures and actions.
-
-Example:
-
-```text
-Gesture                 Action
---------------------------------------
-Pinch                   Left Click
-Two Finger Pinch        Right Click
-Pinch + Hold            Drag
-Two Finger Up           Scroll Up
-Two Finger Down         Scroll Down
-Open Palm               Pause Tracking
-```
-
----
-
-## 7. Multi-Hand Interaction
-
-Support simultaneous tracking of both hands.
-
-Potential applications include:
-
-```text
-Left Hand  → Navigation
-Right Hand → Cursor
-```
-
----
-
-## 8. Calibration System
-
-Add an initial calibration process to automatically determine:
-
-* Camera movement range.
-* User's preferred hand position.
-* Screen boundaries.
-* Cursor sensitivity.
-* Smoothing level.
-
----
-
-## 9. Adaptive Smoothing
-
-Instead of using a fixed smoothing value:
-
-```text
-Slow movement
-    ↓
-More smoothing
-
-Fast movement
-    ↓
-Less smoothing
-```
-
-This could make the cursor both stable and responsive.
-
----
-
-## 10. Gesture Confidence
-
-Gesture recognition can include confidence thresholds to reduce accidental actions.
-
-```text
-Detected Gesture
-       |
-       v
-Confidence Score
-       |
-       +---- Low ----> Ignore
-       |
-       +---- High ---> Execute
-```
-
----
-
-# Extended Architecture
-
-With additional gesture functionality, the project can evolve into:
-
-```mermaid
-flowchart TB
-    CAM[Webcam]
-    CAP[Frame Capture]
-    PRE[Image Preprocessing]
-    DET[Hand Detection]
-    LM[21 Hand Landmarks]
-
-    FE[Feature Extraction]
-    POS[Position Tracking]
-    GEST[Gesture Recognition]
-
-    CURSOR[Cursor Movement]
-    CLICK[Click Controller]
-    DRAG[Drag Controller]
-    SCROLL[Scroll Controller]
-    CUSTOM[Custom Actions]
-
-    OS[Operating System]
-
-    CAM --> CAP
-    CAP --> PRE
-    PRE --> DET
-    DET --> LM
-
-    LM --> FE
-    FE --> POS
-    FE --> GEST
-
-    POS --> CURSOR
-    GEST --> CLICK
-    GEST --> DRAG
-    GEST --> SCROLL
-    GEST --> CUSTOM
-
-    CURSOR --> OS
-    CLICK --> OS
-    DRAG --> OS
-    SCROLL --> OS
-    CUSTOM --> OS
-```
-
----
-
-# Development Roadmap
-
-| Phase    | Feature                  | Status      |
-| -------- | ------------------------ | ----------- |
-| Phase 1  | Python environment setup | Completed   |
-| Phase 2  | Webcam integration       | Completed   |
-| Phase 3  | MediaPipe hand detection | Completed   |
-| Phase 4  | Hand landmark extraction | Completed   |
-| Phase 5  | Cursor movement          | Completed   |
-| Phase 6  | Coordinate mapping       | Completed   |
-| Phase 7  | Cursor smoothing         | Implemented |
-| Phase 8  | Camera mirroring         | Implemented |
-| Phase 9  | Click gestures           | Planned     |
-| Phase 10 | Right-click gesture      | Planned     |
-| Phase 11 | Drag-and-drop            | Planned     |
-| Phase 12 | Scroll gestures          | Planned     |
-| Phase 13 | Gesture customization    | Planned     |
-| Phase 14 | Calibration              | Planned     |
-| Phase 15 | Multi-hand interaction   | Planned     |
-| Phase 16 | Adaptive gesture system  | Planned     |
-
----
-
-# Development Workflow
-
-The recommended development workflow is:
-
-```mermaid
-flowchart LR
-    A[Capture Frame]
-    B[Test Hand Detection]
-    C[Test Landmarks]
-    D[Test Coordinates]
-    E[Test Cursor Mapping]
-    F[Test Smoothing]
-    G[Add Gesture]
-    H[Test Gesture]
-    I[Integrate]
-    J[Optimize]
-
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    H --> I
-    I --> J
-    J --> A
-```
-
-Each layer can be tested independently before adding the next layer.
-
----
-
-# Design Principles
-
-GestureFlow follows several software-design principles.
-
-## Modularity
-
-Hand detection and cursor control are kept separate.
-
-This allows the hand detector to be reused for future applications.
-
-## Configurability
-
-Important behavior such as smoothing and movement margins should not be hard-coded unnecessarily.
-
-## Real-Time Processing
-
-The system is designed around continuous frame processing rather than batch processing.
-
-## Extensibility
-
-The cursor-control system acts as the foundation for future gesture-based controls.
-
-## Separation of Concerns
-
-Different components handle different responsibilities:
-
-```text
-Camera
-  ↓
-Image Processing
-  ↓
-Hand Detection
-  ↓
-Coordinate Processing
-  ↓
-Gesture / Cursor Logic
-  ↓
-OS Interaction
-```
-
----
-
-# Learning Outcomes
-
-This project provides practical experience with:
-
-* Python application development.
-* Virtual environments.
-* OpenCV.
-* Computer vision.
-* MediaPipe.
-* Hand landmark detection.
-* Coordinate transformations.
-* Real-time video processing.
-* Human-computer interaction.
-* Operating-system automation.
-* Gesture recognition.
-* Object-oriented programming.
-* Modular software architecture.
-* Real-time performance optimization.
-
----
-
-# Example Interaction
-
-A typical session looks like:
-
-```text
-1. User starts GestureFlow
-          |
-          v
-2. Webcam initializes
-          |
-          v
-3. Camera captures frames
-          |
-          v
-4. MediaPipe detects hand
-          |
-          v
-5. Index fingertip is tracked
-          |
-          v
-6. Hand coordinates are normalized
-          |
-          v
-7. Coordinates are mapped to display
-          |
-          v
-8. Smoothing is applied
-          |
-          v
-9. PyAutoGUI moves system cursor
-          |
-          v
-10. Process repeats in real time
-```
-
----
-
-# Technical Summary
-
-| Layer            | Technology / Component | Responsibility                           |
-| ---------------- | ---------------------- | ---------------------------------------- |
-| Input            | Webcam                 | Captures user video                      |
-| Image Processing | OpenCV                 | Frame capture, preprocessing and display |
-| Detection        | MediaPipe              | Detects hand and landmarks               |
-| Data Processing  | Python / NumPy         | Coordinates and numerical processing     |
-| Control          | Cursor Controller      | Converts landmarks into cursor movement  |
-| Automation       | PyAutoGUI              | Sends cursor commands to OS              |
-| Interface        | OpenCV Window          | Displays camera/tracking output          |
-
----
-
-# Why GestureFlow?
-
-GestureFlow demonstrates how a conventional webcam can be transformed into an interactive input device using software.
-
-Instead of:
-
-```text
-Physical Hand
-     ↓
-Physical Mouse
-     ↓
-Computer
-```
-
-GestureFlow creates:
-
-```text
-Physical Hand
-     ↓
-Webcam
-     ↓
-Computer Vision
-     ↓
-Hand Landmarks
-     ↓
-Coordinate Mapping
-     ↓
-Gesture / Cursor Controller
-     ↓
-Operating System
-```
-
-The project therefore combines **computer vision, real-time processing, human-computer interaction, and system automation** into a single application.
-
----
-
-# Contributing
-
-Contributions can focus on improving:
-
-* Hand-tracking reliability.
-* Cursor precision.
-* Smoothing algorithms.
-* Gesture recognition.
-* Performance.
-* Calibration.
-* User interface.
-* Documentation.
-* Cross-platform compatibility.
-
-A typical contribution workflow is:
-
-```bash
-git checkout -b feature/new-gesture
-```
-
-Implement and test the feature, then commit the changes:
-
-```bash
-git add .
-git commit -m "Add new gesture"
-git push origin feature/new-gesture
-```
-
-Create a pull request after testing the implementation.
-
----
-
-# License
-
-Add the project's chosen license here.
-
-For example:
-
-```text
-MIT License
-```
-
-If a license has not yet been selected, this section should be updated before publishing the repository.
-
----
-
-# Project Status
-
-GestureFlow currently provides the core foundation for touchless cursor control:
+The core pipeline is:
 
 ```text
 Webcam
    ↓
-Hand Detection
+Local Computer
    ↓
-Landmark Tracking
+OpenCV
    ↓
-Coordinate Mapping
+MediaPipe
    ↓
-Cursor Smoothing
-   ↓
-System Cursor Control
+Local Cursor Control
 ```
 
-The architecture is designed to support additional gesture-based interactions such as clicking, dragging, scrolling, and customizable touchless commands.
+Camera frames do not need to be uploaded to a remote server for the basic implementation.
+
+---
+
+# 26. Project Status
+
+| Component              | Status         |
+| ---------------------- | -------------- |
+| Webcam integration     | Complete       |
+| Frame processing       | Complete       |
+| Hand detection         | Complete       |
+| Landmark tracking      | Complete       |
+| Coordinate mapping     | Complete       |
+| Movement margin        | Complete       |
+| Cursor smoothing       | Complete       |
+| Camera mirroring       | Complete       |
+| Cursor control         | Complete       |
+| Left/right click       | Planned        |
+| Drag and drop          | Planned        |
+| Scrolling              | Planned        |
+| Gesture engine         | In development |
+| Calibration            | Planned        |
+| Multi-hand interaction | Planned        |
+
+---
+
+# 27. Technical Summary
+
+GestureFlow converts physical hand movement into operating-system input through a real-time computer-vision pipeline.
+
+The complete transformation is:
+
+```text
+Physical Hand Movement
+          ↓
+      Webcam Frame
+          ↓
+      OpenCV Frame
+          ↓
+    MediaPipe Inference
+          ↓
+   21 Hand Landmarks
+          ↓
+   Landmark Selection
+          ↓
+Normalized Coordinates
+          ↓
+   Active Region Mapping
+          ↓
+      Clamping
+          ↓
+ Camera → Screen Mapping
+          ↓
+   Cursor Smoothing
+          ↓
+     Screen Position
+          ↓
+       PyAutoGUI
+          ↓
+   OS Cursor Movement
+```
+
+The architecture separates **perception**, **coordinate processing**, and **OS interaction**, providing a foundation for extending GestureFlow from simple cursor control into a broader touchless HCI framework.
 
 ---
 
 ## Built With
 
-* Python
-* OpenCV
-* MediaPipe
-* NumPy
-* PyAutoGUI
+**Python · OpenCV · MediaPipe · NumPy · PyAutoGUI**
 
 ---
 
