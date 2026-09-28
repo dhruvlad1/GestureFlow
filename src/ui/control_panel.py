@@ -1,4 +1,4 @@
-"""Compact floating control panel for GestureFlow."""
+"""Primary GestureFlow workspace and live tracking status."""
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -12,9 +12,11 @@ from PySide6.QtWidgets import (
 )
 
 from app.state import ApplicationState
+from ui.camera_view import CameraView
+
 
 class ControlPanel(QWidget):
-    """Small utility panel that controls and reports application state."""
+    """Main workspace for the camera pipeline and its current state."""
 
     show_camera_requested = Signal()
     settings_requested = Signal()
@@ -23,28 +25,21 @@ class ControlPanel(QWidget):
         super().__init__()
 
         self.camera_controller = camera_controller
-        self.camera_visible = False
         self.paused = False
 
         self.setObjectName("controlPanel")
-        self.setMinimumSize(320, 360)
-        self.setMaximumSize(420, 540)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 20)
-        layout.setSpacing(12)
+        layout.setContentsMargins(28, 26, 28, 28)
+        layout.setSpacing(16)
 
         layout.addLayout(self.create_header())
+        layout.addWidget(self.create_camera_section(), 1)
         layout.addWidget(self.create_status_section())
-        layout.addWidget(self.create_divider())
-        layout.addLayout(self.create_gesture_section())
-        layout.addStretch()
-        layout.addLayout(self.create_start_stop_row())
-        layout.addLayout(self.create_action_row())
-        layout.addWidget(self.create_settings_button())
+        layout.addLayout(self.create_bottom_section())
 
         self.connect_signals()
-        self.update_running_state(False)
+        self.update_state(ApplicationState.INACTIVE)
 
     def create_header(self):
         header = QHBoxLayout()
@@ -56,7 +51,7 @@ class ControlPanel(QWidget):
         title = QLabel("GestureFlow")
         title.setObjectName("panelTitle")
 
-        subtitle = QLabel("Touchless control")
+        subtitle = QLabel("Touchless cursor control using your hand")
         subtitle.setObjectName("panelSubtitle")
 
         title_layout.addWidget(title)
@@ -64,7 +59,7 @@ class ControlPanel(QWidget):
         header.addLayout(title_layout)
         header.addStretch()
 
-        self.status_indicator = QLabel("●  Inactive")
+        self.status_indicator = QLabel("●  Ready")
         self.status_indicator.setObjectName("panelStatus")
         header.addWidget(
             self.status_indicator,
@@ -73,46 +68,48 @@ class ControlPanel(QWidget):
 
         return header
 
+    def create_camera_section(self):
+        section = QFrame()
+        section.setObjectName("cameraSection")
+
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        self.camera_view = CameraView()
+        self.camera_view.setMinimumSize(420, 280)
+        layout.addWidget(self.camera_view)
+        return section
+
     def create_status_section(self):
         section = QFrame()
         section.setObjectName("statusSection")
 
-        layout = QVBoxLayout(section)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(7)
+        layout = QHBoxLayout(section)
+        layout.setContentsMargins(16, 13, 16, 13)
+        layout.setSpacing(20)
 
-        self.control_status = self.create_status_row(
-            "Gesture Control",
-            "Inactive",
-        )
-        self.camera_status = self.create_status_row(
-            "Camera",
-            "Inactive",
-        )
-        self.hand_status = self.create_status_row(
-            "Hand Tracking",
-            "Inactive",
-        )
+        self.control_status = self.create_status_row("Cursor control", "Inactive")
+        self.camera_status = self.create_status_row("Camera", "Inactive")
+        self.hand_status = self.create_status_row("Hand", "Inactive")
 
         for row in (
             self.control_status[0],
             self.camera_status[0],
             self.hand_status[0],
         ):
-            layout.addLayout(row)
+            layout.addLayout(row, 1)
 
         return section
 
     def create_status_row(self, title, value):
-        row = QHBoxLayout()
-        row.setSpacing(8)
+        row = QVBoxLayout()
+        row.setSpacing(3)
 
         title_label = QLabel(title)
         title_label.setObjectName("statusTitle")
 
         value_label = QLabel(value)
         value_label.setObjectName("statusValue")
-        value_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         value_label.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
@@ -122,20 +119,21 @@ class ControlPanel(QWidget):
         row.addWidget(value_label)
         return row, value_label
 
-    def create_divider(self):
-        divider = QFrame()
-        divider.setObjectName("panelDivider")
-        divider.setFixedHeight(1)
-        return divider
+    def create_bottom_section(self):
+        section = QHBoxLayout()
+        section.setSpacing(18)
+        section.addLayout(self.create_gesture_section(), 1)
+        section.addLayout(self.create_action_section(), 0)
+        return section
 
     def create_gesture_section(self):
         section = QVBoxLayout()
         section.setSpacing(3)
 
-        heading = QLabel("Current Gesture")
+        heading = QLabel("Current gesture")
         heading.setObjectName("sectionLabel")
 
-        self.gesture_value = QLabel("Waiting")
+        self.gesture_value = QLabel("Waiting for a hand")
         self.gesture_value.setObjectName("gestureValue")
         self.gesture_value.setWordWrap(True)
 
@@ -143,80 +141,42 @@ class ControlPanel(QWidget):
         section.addWidget(self.gesture_value)
         return section
 
-    def create_action_row(self):
+    def create_action_section(self):
         actions = QHBoxLayout()
-        actions.setSpacing(8)
+        actions.setSpacing(10)
+
+        self.start_button = QPushButton("Start tracking")
+        self.start_button.setObjectName("primaryButton")
+        self.start_button.setMinimumHeight(40)
 
         self.pause_button = QPushButton("Pause")
         self.pause_button.setObjectName("secondaryButton")
-        self.pause_button.setMinimumHeight(38)
+        self.pause_button.setMinimumHeight(40)
 
-        self.camera_button = QPushButton("Show Camera")
-        self.camera_button.setObjectName("secondaryButton")
-        self.camera_button.setMinimumHeight(38)
-
-        actions.addWidget(self.pause_button)
-        actions.addWidget(self.camera_button)
-        return actions
-
-    def create_start_stop_row(self):
-        actions = QHBoxLayout()
-        actions.setSpacing(8)
-
-        self.start_button = QPushButton("Start Gesture Control")
-        self.start_button.setObjectName("primaryButton")
-        self.start_button.setMinimumHeight(38)
-
-        self.stop_button = QPushButton("Stop")
-        self.stop_button.setObjectName("secondaryButton")
-        self.stop_button.setMinimumHeight(38)
-
-        actions.addWidget(self.start_button, 2)
-        actions.addWidget(self.stop_button, 1)
-        return actions
-
-    def create_settings_button(self):
         self.settings_button = QPushButton("Settings")
-        self.settings_button.setObjectName("textButton")
-        self.settings_button.setMinimumHeight(34)
-        return self.settings_button
+        self.settings_button.setObjectName("secondaryButton")
+        self.settings_button.setMinimumHeight(40)
+
+        actions.addWidget(self.start_button)
+        actions.addWidget(self.pause_button)
+        actions.addWidget(self.settings_button)
+        return actions
 
     def connect_signals(self):
         self.start_button.clicked.connect(self.start_camera)
-        self.stop_button.clicked.connect(self.stop_camera)
         self.pause_button.clicked.connect(self.toggle_pause)
-        self.camera_button.clicked.connect(self.show_camera_requested)
         self.settings_button.clicked.connect(self.settings_requested)
 
-        self.camera_controller.state_changed.connect(
-            self.update_state
-        )
-        self.camera_controller.status_changed.connect(
-            self.update_hand_status
-        )
-        self.camera_controller.gesture_changed.connect(
-            self.update_gesture
-        )
-        self.camera_controller.error.connect(
-            self.update_error
-        )
-
-    def toggle_pause(self):
-        self.camera_controller.toggle_paused()
+        self.camera_controller.state_changed.connect(self.update_state)
+        self.camera_controller.status_changed.connect(self.update_hand_status)
+        self.camera_controller.gesture_changed.connect(self.update_gesture)
+        self.camera_controller.error.connect(self.update_error)
 
     def start_camera(self):
         self.camera_controller.start()
 
-    def stop_camera(self):
-        self.camera_controller.stop()
-
-    def update_running_state(self, running):
-        state = (
-            ApplicationState.ACTIVE
-            if running
-            else ApplicationState.INACTIVE
-        )
-        self.update_state(state)
+    def toggle_pause(self):
+        self.camera_controller.toggle_paused()
 
     def update_state(self, state):
         starting = state == ApplicationState.STARTING
@@ -226,49 +186,36 @@ class ControlPanel(QWidget):
         error = state == ApplicationState.ERROR
 
         self.start_button.setEnabled(
-            state in (
-                ApplicationState.INACTIVE,
-                ApplicationState.ERROR,
-            )
-        )
-        self.stop_button.setEnabled(
-            state in (
-                ApplicationState.STARTING,
-                ApplicationState.ACTIVE,
-                ApplicationState.PAUSED,
-                ApplicationState.STOPPING,
-            )
+            state in (ApplicationState.INACTIVE, ApplicationState.ERROR)
         )
         self.pause_button.setEnabled(active or paused)
-        self.camera_button.setEnabled(active or paused)
-
         self.paused = paused
         self.pause_button.setText("Resume" if paused else "Pause")
 
         if starting:
-            control_value = "Starting"
-            camera_value = "Starting"
-            status_text = "●  Starting"
+            control_value = "Initializing"
+            camera_value = "Initializing"
+            status_text = "●  Initializing"
         elif active:
             control_value = "Active"
-            camera_value = "Active"
-            status_text = "●  Active"
+            camera_value = "Ready"
+            status_text = "●  Tracking active"
         elif paused:
             control_value = "Paused"
-            camera_value = "Active"
-            status_text = "●  Paused"
+            camera_value = "Ready"
+            status_text = "●  Tracking paused"
         elif stopping:
             control_value = "Stopping"
             camera_value = "Stopping"
             status_text = "●  Stopping"
         elif error:
-            control_value = "Error"
-            camera_value = "Error"
-            status_text = "●  Error"
+            control_value = "Unavailable"
+            camera_value = "Unavailable"
+            status_text = "●  Camera unavailable"
         else:
             control_value = "Inactive"
             camera_value = "Inactive"
-            status_text = "●  Inactive"
+            status_text = "●  Ready"
 
         self.set_value(self.control_status[1], control_value)
         self.set_value(self.camera_status[1], camera_value)
@@ -277,12 +224,10 @@ class ControlPanel(QWidget):
         if state == ApplicationState.INACTIVE:
             self.paused = False
             self.pause_button.setText("Pause")
-            self.set_value(self.camera_status[1], "Inactive")
             self.set_value(self.hand_status[1], "Inactive")
-            self.gesture_value.setText("Waiting")
-
+            self.gesture_value.setText("Waiting for a hand")
         elif error:
-            self.set_value(self.hand_status[1], "Pipeline error")
+            self.set_value(self.hand_status[1], "Unavailable")
 
     def update_hand_status(self, status):
         self.set_value(self.hand_status[1], status)
@@ -291,22 +236,26 @@ class ControlPanel(QWidget):
         self.gesture_value.setText(gesture.title())
 
     def update_error(self, message):
-        self.set_value(self.camera_status[1], "Error")
-        self.set_value(self.hand_status[1], message)
-        self.status_indicator.setText("●  Error")
+        self.set_value(self.camera_status[1], "Unavailable")
+        self.set_value(self.hand_status[1], "Check camera permissions")
+        self.status_indicator.setText("●  Camera unavailable")
 
-    def set_camera_visible(self, visible):
-        self.camera_visible = visible
-        self.camera_button.setText(
-            "Hide Camera" if visible else "Show Camera"
-        )
+    def display_frame(self, frame):
+        """Display a processed frame in the main workspace."""
+
+        self.camera_view.display_frame(frame)
+
+    def clear_frame(self):
+        """Restore the camera placeholder after stopping."""
+
+        self.camera_view.clear_frame()
 
     @staticmethod
     def set_value(label, value):
         label.setText(value)
         label.setProperty(
             "state",
-            "active" if value in ("Active", "Detected") else "muted",
+            "active" if value in ("Active", "Ready", "Detected") else "muted",
         )
         label.style().unpolish(label)
         label.style().polish(label)

@@ -40,6 +40,8 @@ class CameraController(QObject):
 
     pause_requested = Signal(bool)
 
+    settings_changed = Signal(object)
+
     def __init__(self):
         """
         Initialize the camera controller.
@@ -61,6 +63,7 @@ class CameraController(QObject):
         self.state = ApplicationState.INACTIVE
 
         self.paused = False
+        self.settings = None
 
     def transition_to(self, target):
         """Apply a valid state transition and notify the UI."""
@@ -169,9 +172,17 @@ class CameraController(QObject):
             Qt.ConnectionType.QueuedConnection,
         )
 
+        self.settings_changed.connect(
+            self.worker.apply_settings,
+            Qt.ConnectionType.QueuedConnection,
+        )
+
         self.thread.finished.connect(
             self.on_thread_finished
         )
+
+        if self.settings is not None:
+            self.settings_changed.emit(self.settings)
 
         # -----------------------------------------------------
         # Start the Qt thread.
@@ -181,6 +192,13 @@ class CameraController(QObject):
 
         self.thread.start()
         return True
+
+    def update_settings(self, settings):
+        """Apply user settings to the active camera worker."""
+
+        self.settings = settings
+        if self.worker is not None:
+            self.settings_changed.emit(settings)
 
     # =========================================================
     # Stop

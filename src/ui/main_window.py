@@ -37,9 +37,8 @@ class MainWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowTitle(WINDOW_TITLE)
         self.setWindowIcon(self.tray_icon())
-        self.setMinimumSize(320, 360)
-        self.setMaximumSize(420, 540)
-        self.resize(360, 430)
+        self.setMinimumSize(780, 620)
+        self.resize(980, 760)
         self.setStyleSheet(get_app_style())
 
         self.control_panel = ControlPanel(self.camera_controller)
@@ -48,6 +47,9 @@ class MainWindow(QMainWindow):
         self.camera_controller.frame_ready.connect(
             self.preview_window.display_frame
         )
+        self.camera_controller.frame_ready.connect(
+            self.control_panel.display_frame
+        )
         self.camera_controller.stopped.connect(self.finish_exit)
         self.camera_controller.stopped.connect(self.on_camera_stopped)
         self.control_panel.show_camera_requested.connect(
@@ -55,7 +57,7 @@ class MainWindow(QMainWindow):
         )
         self.control_panel.settings_requested.connect(self.show_settings)
         self.preview_window.hidden_by_user.connect(
-            lambda: self.control_panel.set_camera_visible(False)
+            self.update_camera_tray_text
         )
 
         self.create_tray_icon()
@@ -128,7 +130,6 @@ class MainWindow(QMainWindow):
     def toggle_camera_preview(self):
         if self.preview_window.isVisible():
             self.preview_window.hide()
-            self.control_panel.set_camera_visible(False)
         elif self.camera_controller.state in (
             ApplicationState.ACTIVE,
             ApplicationState.PAUSED,
@@ -136,7 +137,6 @@ class MainWindow(QMainWindow):
             self.preview_window.show()
             self.preview_window.raise_()
             self.preview_window.activateWindow()
-            self.control_panel.set_camera_visible(True)
 
         self.update_camera_tray_text()
 
@@ -149,6 +149,9 @@ class MainWindow(QMainWindow):
         if self.settings_dialog is None:
             self.settings_dialog = SettingsDialog(self)
             self.settings_dialog.setStyleSheet(get_app_style())
+            self.settings_dialog.settings_changed.connect(
+                self.camera_controller.update_settings
+            )
 
         self.settings_dialog.show()
         self.settings_dialog.raise_()
@@ -160,7 +163,7 @@ class MainWindow(QMainWindow):
     def on_camera_stopped(self):
         self.preview_window.clear_frame()
         self.preview_window.hide()
-        self.control_panel.set_camera_visible(False)
+        self.control_panel.clear_frame()
         self.update_camera_tray_text()
 
     def update_tray_state(self, state):

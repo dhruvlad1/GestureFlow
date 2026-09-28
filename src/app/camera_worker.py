@@ -166,6 +166,20 @@ class CameraWorker(QObject):
             pyautogui.mouseUp()
             self.mouse_button_down = False
 
+    @Slot(object)
+    def apply_settings(self, settings):
+        """Update cursor mapping without restarting camera capture."""
+
+        if self.cursor_controller is None:
+            return
+
+        self.cursor_controller.smoothing = settings["smoothing"]
+        self.cursor_controller.camera_min_x = settings["camera_min"]
+        self.cursor_controller.camera_max_x = 1 - settings["camera_min"]
+        self.cursor_controller.camera_min_y = settings["camera_min"]
+        self.cursor_controller.camera_max_y = 1 - settings["camera_min"]
+        self.cursor_controller.screen_padding = settings["screen_padding"]
+
     @Slot()
     def process_next_frame(self):
         """Read and process one frame from the worker thread."""

@@ -1,29 +1,26 @@
-"""Global stylesheet for the GestureFlow desktop utility."""
+"""Dark glass visual system for the GestureFlow desktop utility."""
 
 
 APP_STYLE = """
 QMainWindow#mainWindow,
 QDialog,
 QWidget#controlPanel {
-    background-color: rgba(25, 34, 42, 238);
-    color: #eef4f5;
+    background-color: #0b0f12;
+    color: #f2f5f4;
+}
+
+QMainWindow#mainWindow {
+    border: 1px solid rgba(255, 255, 255, 18);
 }
 
 QMainWindow#cameraPreviewWindow {
-    background-color: #10191f;
-}
-
-QLabel#cameraView {
-    background-color: #10191f;
-    color: #9eafb5;
-    border: none;
-    font-size: 14px;
+    background-color: #090d10;
 }
 
 QWidget {
     font-family: "Segoe UI";
     font-size: 13px;
-    color: #eef4f5;
+    color: #f2f5f4;
 }
 
 QLabel {
@@ -31,8 +28,8 @@ QLabel {
 }
 
 QLabel#panelTitle {
-    color: #f5f8f8;
-    font-size: 21px;
+    color: #f5f8f7;
+    font-size: 24px;
     font-weight: 700;
 }
 
@@ -40,93 +37,133 @@ QLabel#panelSubtitle,
 QLabel#sectionLabel,
 QLabel#statusTitle,
 QLabel#dialogMessage {
-    color: #9eafb5;
+    color: #879398;
 }
 
 QLabel#panelSubtitle {
-    font-size: 12px;
+    font-size: 13px;
 }
 
 QLabel#panelStatus {
-    color: #71d0bd;
+    color: #73d6b0;
     font-size: 12px;
     font-weight: 600;
 }
 
-QFrame#statusSection {
-    background-color: rgba(255, 255, 255, 18);
-    border: 1px solid rgba(255, 255, 255, 28);
-    border-radius: 10px;
+QFrame#cameraSection {
+    background-color: rgba(255, 255, 255, 7);
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 16px;
 }
 
-QFrame#panelDivider {
-    background-color: rgba(255, 255, 255, 32);
-    border: none;
+QLabel#cameraView {
+    background-color: #10171b;
+    color: #7f8e92;
+    border: 1px solid rgba(255, 255, 255, 16);
+    border-radius: 11px;
+    font-size: 14px;
+}
+
+QFrame#statusSection {
+    background-color: rgba(255, 255, 255, 9);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 12px;
+}
+
+QLabel#statusTitle,
+QLabel#sectionLabel {
+    font-size: 11px;
+    font-weight: 600;
 }
 
 QLabel#statusValue {
-    color: #aab9bd;
+    color: #a9b3b4;
     font-weight: 600;
 }
 
 QLabel#statusValue[state="active"] {
-    color: #71d0bd;
+    color: #73d6b0;
 }
 
 QLabel#gestureValue {
-    color: #f1f6f5;
-    font-size: 24px;
+    color: #f1f5f3;
+    font-size: 19px;
     font-weight: 600;
 }
 
 QPushButton {
     min-height: 34px;
-    border-radius: 7px;
-    padding: 6px 12px;
+    border-radius: 10px;
+    padding: 7px 14px;
     font-size: 12px;
     font-weight: 600;
 }
 
 QPushButton#primaryButton {
-    background-color: #2d9d8c;
+    background-color: #3a9f83;
     color: #ffffff;
-    border: 1px solid #49b5a4;
+    border: 1px solid #55b998;
 }
 
 QPushButton#primaryButton:hover {
-    background-color: #3aaf9e;
+    background-color: #48b393;
+}
+
+QPushButton#primaryButton:focus,
+QPushButton#secondaryButton:focus,
+QPushButton#textButton:focus {
+    border: 1px solid #8be2c1;
 }
 
 QPushButton#secondaryButton {
-    background-color: rgba(255, 255, 255, 18);
-    color: #e8f0ef;
-    border: 1px solid rgba(255, 255, 255, 48);
+    background-color: rgba(255, 255, 255, 12);
+    color: #e6edeb;
+    border: 1px solid rgba(255, 255, 255, 30);
 }
 
 QPushButton#secondaryButton:hover {
-    background-color: rgba(255, 255, 255, 30);
+    background-color: rgba(255, 255, 255, 22);
 }
 
 QPushButton#textButton {
     background-color: transparent;
-    color: #9eafb5;
-    border: none;
+    color: #aab5b5;
+    border: 1px solid transparent;
 }
 
 QPushButton#textButton:hover {
-    color: #71d0bd;
+    color: #73d6b0;
 }
 
 QPushButton:disabled {
-    background-color: rgba(255, 255, 255, 10);
-    color: #627279;
-    border-color: rgba(255, 255, 255, 18);
+    background-color: rgba(255, 255, 255, 7);
+    color: #627073;
+    border-color: rgba(255, 255, 255, 12);
 }
 
 QLabel#dialogTitle {
-    color: #f5f8f8;
-    font-size: 18px;
+    color: #f5f8f7;
+    font-size: 19px;
     font-weight: 700;
+}
+
+QSlider::groove:horizontal {
+    height: 4px;
+    background: rgba(255, 255, 255, 22);
+    border-radius: 2px;
+}
+
+QSlider::sub-page:horizontal {
+    background: #4aa98d;
+    border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+    width: 14px;
+    margin: -5px 0;
+    background: #dcefe8;
+    border: 1px solid #73d6b0;
+    border-radius: 7px;
 }
 
 QScrollBar:vertical {
