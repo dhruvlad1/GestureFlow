@@ -5,3 +5,9 @@ __pycache__/
 .vscode/
 .idea/
 .pytest_cache/
+build/
+dist/
+debug-build/
+debug-dist/
+GestureFlowDebug.spec
+debug-*.txt
