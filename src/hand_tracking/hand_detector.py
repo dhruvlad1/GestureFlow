@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import cv2
 import mediapipe as mp
 
@@ -11,6 +9,7 @@ from utils.config import (
     MIN_DETECTION_CONFIDENCE,
     MIN_TRACKING_CONFIDENCE,
 )
+from utils.paths import resource_path
 
 
 class HandDetector:
@@ -28,17 +27,15 @@ class HandDetector:
         min_detection_confidence=MIN_DETECTION_CONFIDENCE,
         min_tracking_confidence=MIN_TRACKING_CONFIDENCE,
     ):
-        # -----------------------------------------------------
-        # Locate the project root.
-        # -----------------------------------------------------
-
-        project_root = Path(__file__).resolve().parents[2]
-
-        model_path = (
-            project_root
-            / "models"
-            / "hand_landmarker.task"
+        model_path = resource_path(
+            "models",
+            "hand_landmarker.task",
         )
+
+        if not model_path.is_file():
+            raise FileNotFoundError(
+                f"Hand landmark model not found: {model_path}"
+            )
 
         # -----------------------------------------------------
         # Configure MediaPipe model.

@@ -1,4 +1,7 @@
 """
+
+
+__version__ = "0.1.0"
 Central configuration for GestureFlow.
 
 All user-adjustable application parameters are kept here so that
